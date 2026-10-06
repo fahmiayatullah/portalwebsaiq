@@ -1,6 +1,6 @@
 import React from 'react';
 import {
-  LogOut, ArrowLeft, GraduationCap, UserCheck, Users, ShieldCheck, Loader2
+  LogOut, ArrowLeft, GraduationCap, UserCheck, Users, ShieldCheck
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import type { UserRole } from '../types';

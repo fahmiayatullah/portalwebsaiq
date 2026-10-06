@@ -1,13 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import {
   LayoutDashboard, Users, UserCheck, Award, MessageSquare,
-  Megaphone, History, User, PlusCircle, CheckCircle2,
-  Save, Send, ChevronRight, Loader2, AlertCircle
+  History, User, PlusCircle, CheckCircle2,
+  Save, Send, ChevronRight, AlertCircle
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { supabase } from '../lib/supabase';
 import { PortalHeader } from '../components/PortalHeader';
-import type { Teacher, Student, Grade, TeacherNote, Announcement, ClassRoom, Subject } from '../types';
+import type { Student, Grade, TeacherNote, ClassRoom, Subject } from '../types';
 
 export const TeacherPortal: React.FC = () => {
   const { teacherData, currentPath, navigate } = useAuth();
@@ -37,7 +37,6 @@ export const TeacherPortal: React.FC = () => {
   const [teacherGrades, setTeacherGrades] = useState<Grade[]>([]);
   const [teacherNotes, setTeacherNotes] = useState<TeacherNote[]>([]);
 
-  const [loading, setLoading] = useState(true);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
 
@@ -61,14 +60,6 @@ export const TeacherPortal: React.FC = () => {
     content: '',
   });
 
-  // Form: Pengumuman
-  const [announcementForm, setAnnouncementForm] = useState({
-    title: '',
-    content: '',
-    targetType: 'all' as 'all' | 'class' | 'student',
-    targetClassId: '',
-  });
-
   const showToast = (msg: string) => {
     setToastMessage(msg);
     setTimeout(() => setToastMessage(null), 3500);
@@ -76,7 +67,6 @@ export const TeacherPortal: React.FC = () => {
 
   // Fetch Master Data & Teacher Records from Supabase
   const loadTeacherData = async () => {
-    setLoading(true);
     try {
       // 1. Fetch Classes
       const { data: clsData } = await supabase
@@ -154,8 +144,6 @@ export const TeacherPortal: React.FC = () => {
       }
     } catch (err) {
       console.error('Error loading teacher data:', err);
-    } finally {
-      setLoading(false);
     }
   };
 

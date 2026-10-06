@@ -1,22 +1,18 @@
 import React, { useState, useEffect } from 'react';
 import {
-  Users, Award, MessageSquare, Megaphone, TrendingUp,
-  ChevronRight, Eye, Loader2
+  Users, Award, MessageSquare, Loader2
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { supabase } from '../lib/supabase';
 import { PortalHeader } from '../components/PortalHeader';
-import type { Student, Grade, TeacherNote, Announcement } from '../types';
+import type { Student, Grade, TeacherNote } from '../types';
 
 export const ParentPortal: React.FC = () => {
   const { user } = useAuth();
   const [child, setChild] = useState<Student | null>(null);
   const [grades, setGrades] = useState<Grade[]>([]);
   const [notes, setNotes] = useState<TeacherNote[]>([]);
-  const [announcements, setAnnouncements] = useState<Announcement[]>([]);
   const [loading, setLoading] = useState(true);
-
-  const [selectedGrade, setSelectedGrade] = useState<Grade | null>(null);
 
   useEffect(() => {
     const fetchParentChildData = async () => {
@@ -69,17 +65,6 @@ export const ParentPortal: React.FC = () => {
               teacher_name: (n as any).teachers?.name || 'Guru',
             })));
           }
-        }
-
-        // Pengumuman sekolah
-        const { data: ancData } = await supabase
-          .from('announcements')
-          .select('*')
-          .eq('status', 'published')
-          .order('created_at', { ascending: false });
-
-        if (ancData) {
-          setAnnouncements(ancData as Announcement[]);
         }
       } catch (err) {
         console.error('Error fetching parent portal data:', err);
