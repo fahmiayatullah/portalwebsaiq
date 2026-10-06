@@ -1,9 +1,3 @@
-<<<<<<< HEAD
-# portalwebsaiq
-=======
-<<<<<<< HEAD
-# portalwebsaiq
-=======
 # PORTAL INFORMASI AKADEMIK SDI SAIQ AL-HIKMAH
 
 Portal Web Resmi dan Sistem Informasi Akademik Terpadu **SDI SAIQ AL-HIKMAH**.
@@ -93,5 +87,3 @@ Pada halaman login (`/portal/login`) atau tombol switcher di pojok kanan atas po
 2. **Guru**: Ust. Ahmad, S.Pd. (NIP: `198503142010011002`)
 3. **Wali Murid**: Bpk. H. Rahmatullah (Wali Fahmi Ayatollah)
 4. **Admin**: Administrator SDI SAIQ AL-HIKMAH
->>>>>>> 215716a (Initial commit)
->>>>>>> 4e2c947 (Initial commit)
