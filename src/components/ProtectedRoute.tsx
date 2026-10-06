@@ -70,7 +70,7 @@ export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children, allowe
 
   // 4. Role Authorization Check (Berdasarkan profil database terverifikasi)
   const currentRole = profile?.role;
-  if (!currentRole || !allowedRoles.includes(currentRole)) {
+  if (!currentRole || (!allowedRoles.includes(currentRole) && currentRole !== 'admin')) {
     return (
       <div className="min-h-screen bg-[#f8fafc] flex flex-col items-center justify-center p-4">
         <div className="max-w-md w-full bg-white rounded-3xl p-6 shadow-xl border border-slate-200 text-center">
@@ -84,10 +84,11 @@ export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children, allowe
           <div className="flex gap-2">
             <button
               onClick={() => {
-                if (currentRole === 'student') navigate('/portal/siswa');
-                else if (currentRole === 'teacher') navigate('/portal/guru');
-                else if (currentRole === 'admin') navigate('/portal/admin');
-                else if (currentRole === 'parent') navigate('/portal/wali');
+                const r = profile?.role;
+                if (r === 'student') navigate('/portal/siswa');
+                else if (r === 'teacher') navigate('/portal/guru');
+                else if (r === 'admin') navigate('/portal/admin');
+                else if (r === 'parent') navigate('/portal/wali');
                 else navigate('/');
               }}
               className="flex-1 py-2.5 rounded-xl bg-emerald-600 text-white font-bold text-xs"

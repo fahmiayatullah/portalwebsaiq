@@ -111,3 +111,24 @@ export interface NotificationItem {
   isRead: boolean;
   type: 'grade' | 'note' | 'announcement';
 }
+
+export interface NewsArticle {
+  id: string;
+  title: string;
+  category: string;
+  date: string;
+  img: string;
+  content?: string;
+  created_at?: string;
+}
+
+export interface SchoolAgenda {
+  id: string;
+  day: string;
+  month: string;
+  title: string;
+  time: string;
+  location: string;
+  created_at?: string;
+}
+

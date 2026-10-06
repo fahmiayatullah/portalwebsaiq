@@ -7,6 +7,7 @@ import {
   LogIn, UserCheck
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
+import { getStoredArticles, getStoredAgendas } from '../services/articleService';
 
 export const LandingPage: React.FC = () => {
   const { navigate, openExternalExam, externalExamUrl } = useAuth();
@@ -14,6 +15,8 @@ export const LandingPage: React.FC = () => {
   const [isScrolled, setIsScrolled] = useState(false);
   const [showScrollTop, setShowScrollTop] = useState(false);
   const [showExamModal, setShowExamModal] = useState(false);
+  const [articles] = useState(() => getStoredArticles());
+  const [agendas] = useState(() => getStoredAgendas());
 
   useEffect(() => {
     const handleScroll = () => {
@@ -519,12 +522,8 @@ export const LandingPage: React.FC = () => {
                 </h3>
               </div>
               <div className="space-y-3">
-                {[
-                  { day: "12", month: "Okt", title: "Pekan Penilaian Tengah Semester (PTS)", time: "07.30 - 11.30 WIB", location: "Ruang Kelas Masing-masing" },
-                  { day: "18", month: "Okt", title: "Tasmi' Tahfidz Akbar Juz 30 Bersama Wali Murid", time: "08.00 - 12.00 WIB", location: "Masjid SDI SAIQ" },
-                  { day: "24", month: "Okt", title: "Pekan Olahraga Santri & Senam Ceria PJOK", time: "07.00 - 10.00 WIB", location: "Lapangan Utama Sekolah" },
-                ].map((ag, i) => (
-                  <div key={i} className="bg-white p-4 rounded-2xl border border-slate-100 flex items-center gap-4 shadow-sm hover:shadow-md transition-shadow">
+                {agendas.map((ag) => (
+                  <div key={ag.id} className="bg-white p-4 rounded-2xl border border-slate-100 flex items-center gap-4 shadow-sm hover:shadow-md transition-shadow">
                     <div className="w-14 h-14 rounded-xl bg-emerald-600 text-white flex flex-col items-center justify-center shrink-0">
                       <span className="text-lg font-black leading-none">{ag.day}</span>
                       <span className="text-[10px] uppercase font-bold tracking-wider">{ag.month}</span>
@@ -548,21 +547,8 @@ export const LandingPage: React.FC = () => {
               </div>
 
               <div className="grid sm:grid-cols-2 gap-4">
-                {[
-                  {
-                    title: "Siswa SDI SAIQ Raih Prestasi di Ajang Olimpiade Sains & Matematika",
-                    date: "5 Oktober 2026",
-                    category: "Prestasi",
-                    img: "https://images.unsplash.com/photo-1427504494785-3a9ca7044f45?auto=format&fit=crop&q=80&w=400",
-                  },
-                  {
-                    title: "Kegiatan Praktik PJOK dan Pembinaan Kebugaran Jasmani Anak",
-                    date: "3 Oktober 2026",
-                    category: "Akademik",
-                    img: "https://images.unsplash.com/photo-1511649475669-e288648b2339?auto=format&fit=crop&q=80&w=400",
-                  },
-                ].map((item, idx) => (
-                  <div key={idx} className="bg-white rounded-2xl overflow-hidden border border-slate-100 shadow-sm hover:shadow-md transition-all">
+                {articles.map((item) => (
+                  <div key={item.id} className="bg-white rounded-2xl overflow-hidden border border-slate-100 shadow-sm hover:shadow-md transition-all">
                     <img src={item.img} alt={item.title} className="w-full h-36 object-cover" />
                     <div className="p-4">
                       <div className="flex items-center gap-2 text-[11px] text-slate-400 mb-2">

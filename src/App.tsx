@@ -23,7 +23,7 @@ const AppRouter: React.FC = () => {
   // Protected Role-based Portals
   if (currentPath.startsWith('/portal/siswa')) {
     return (
-      <ProtectedRoute allowedRoles={['student']}>
+      <ProtectedRoute allowedRoles={['student', 'admin']}>
         <StudentPortal />
       </ProtectedRoute>
     );
@@ -31,7 +31,7 @@ const AppRouter: React.FC = () => {
 
   if (currentPath.startsWith('/portal/guru')) {
     return (
-      <ProtectedRoute allowedRoles={['teacher']}>
+      <ProtectedRoute allowedRoles={['teacher', 'admin']}>
         <TeacherPortal />
       </ProtectedRoute>
     );
