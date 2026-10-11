@@ -9,7 +9,7 @@ interface ProtectedRouteProps {
 }
 
 export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children, allowedRoles }) => {
-  const { user, profile, loading, navigate, isConfigured } = useAuth();
+  const { user, profile, loading, navigate, isConfigured, studentData, signOut } = useAuth();
 
   // 1. Loading State
   if (loading) {
@@ -45,24 +45,36 @@ export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children, allowe
     );
   }
 
-  // 3. Unauthenticated -> Redirect to Login
+  // 3. Unauthenticated -> Redirect to Dedicated Login
   if (!user) {
+    const isOnlyAdmin = allowedRoles.length === 1 && allowedRoles[0] === 'admin';
+    const isOnlyStudent = allowedRoles.length === 1 && allowedRoles[0] === 'student';
+    const targetLogin = isOnlyAdmin ? '/login/admin' : isOnlyStudent ? '/login/siswa' : '/portal/login';
+
     return (
       <div className="min-h-screen bg-[#f8fafc] flex flex-col items-center justify-center p-4">
-        <div className="max-w-md w-full bg-white rounded-3xl p-6 shadow-xl border border-slate-200 text-center">
-          <div className="w-12 h-12 bg-rose-100 text-rose-700 rounded-2xl flex items-center justify-center mx-auto mb-4">
-            <ShieldAlert className="w-6 h-6" />
+        <div className="max-w-md w-full bg-white rounded-3xl p-6 sm:p-8 shadow-xl border border-slate-200 text-center">
+          <div className="w-14 h-14 bg-rose-100 text-rose-700 rounded-2xl flex items-center justify-center mx-auto mb-4">
+            <ShieldAlert className="w-7 h-7" />
           </div>
-          <h2 className="text-lg font-extrabold text-slate-900 mb-2">Autentikasi Diperlukan</h2>
+          <h2 className="text-xl font-extrabold text-slate-900 mb-2">Autentikasi Diperlukan</h2>
           <p className="text-xs text-slate-600 leading-relaxed mb-6">
-            Anda harus masuk menggunakan akun terdaftar untuk mengakses ruang portal ini.
+            Anda harus masuk menggunakan akun {isOnlyAdmin ? 'Administrator' : isOnlyStudent ? 'Siswa' : 'resmi'} yang terdaftar untuk mengakses ruang portal ini.
           </p>
-          <button
-            onClick={() => navigate('/portal/login')}
-            className="w-full py-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs shadow-md"
-          >
-            Masuk ke Halaman Login
-          </button>
+          <div className="space-y-2">
+            <button
+              onClick={() => navigate(targetLogin)}
+              className="w-full py-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs shadow-md transition-all"
+            >
+              Masuk ke Halaman Login {isOnlyAdmin ? 'Admin' : isOnlyStudent ? 'Siswa' : ''}
+            </button>
+            <button
+              onClick={() => navigate('/')}
+              className="w-full py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs transition-colors"
+            >
+              Kembali ke Beranda
+            </button>
+          </div>
         </div>
       </div>
     );
@@ -70,34 +82,42 @@ export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children, allowe
 
   // 4. Role Authorization Check (Berdasarkan profil database terverifikasi)
   const currentRole = profile?.role;
-  if (!currentRole || (!allowedRoles.includes(currentRole) && currentRole !== 'admin')) {
+  const isAuthorized = currentRole ? allowedRoles.includes(currentRole) : false;
+
+  if (!currentRole || !isAuthorized) {
+    const isStudentTryingAdmin = currentRole === 'student' && allowedRoles.includes('admin');
+    const isAdminTryingStudent = currentRole === 'admin' && allowedRoles.includes('student');
+
     return (
       <div className="min-h-screen bg-[#f8fafc] flex flex-col items-center justify-center p-4">
-        <div className="max-w-md w-full bg-white rounded-3xl p-6 shadow-xl border border-slate-200 text-center">
-          <div className="w-12 h-12 bg-rose-100 text-rose-700 rounded-2xl flex items-center justify-center mx-auto mb-4">
-            <ShieldAlert className="w-6 h-6" />
+        <div className="max-w-md w-full bg-white rounded-3xl p-6 sm:p-8 shadow-xl border border-slate-200 text-center">
+          <div className="w-14 h-14 bg-rose-100 text-rose-700 rounded-2xl flex items-center justify-center mx-auto mb-4">
+            <ShieldAlert className="w-7 h-7" />
           </div>
-          <h2 className="text-lg font-extrabold text-slate-900 mb-1">Akses Tidak Diizinkan</h2>
-          <p className="text-xs text-slate-500 mb-6">
-            Peran akun Anda (<strong className="text-slate-800">{currentRole || 'Belum Terdaftar'}</strong>) tidak memiliki izin untuk mengakses halaman ini.
+          <h2 className="text-xl font-extrabold text-slate-900 mb-1">Akses Tidak Diizinkan</h2>
+          <p className="text-xs text-slate-500 mb-6 leading-relaxed">
+            {isStudentTryingAdmin
+              ? 'Akun Anda adalah akun Siswa dan tidak memiliki kewenangan membuka Portal Administrasi Sekolah.'
+              : isAdminTryingStudent
+                ? 'Portal Siswa dikhususkan untuk akun santri/siswa dengan identitas profil akademik aktif. Untuk memantau nilai seluruh siswa, gunakan Portal Admin.'
+                : `Peran akun Anda (${currentRole || 'Belum Terdaftar'}) tidak memiliki izin untuk mengakses halaman ini.`}
           </p>
-          <div className="flex gap-2">
+          <div className="flex flex-col sm:flex-row gap-2">
             <button
               onClick={() => {
-                const r = profile?.role;
-                if (r === 'student') navigate('/portal/siswa');
-                else if (r === 'teacher') navigate('/portal/guru');
-                else if (r === 'admin') navigate('/portal/admin');
-                else if (r === 'parent') navigate('/portal/wali');
+                if (currentRole === 'student') navigate('/portal/siswa');
+                else if (currentRole === 'teacher') navigate('/portal/guru');
+                else if (currentRole === 'admin') navigate('/portal/admin');
+                else if (currentRole === 'parent') navigate('/portal/wali');
                 else navigate('/');
               }}
-              className="flex-1 py-2.5 rounded-xl bg-emerald-600 text-white font-bold text-xs"
+              className="flex-1 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs shadow-md transition-all"
             >
-              Ke Portal Saya
+              Ke Portal Saya ({currentRole ? currentRole.toUpperCase() : 'Beranda'})
             </button>
             <button
               onClick={() => navigate('/')}
-              className="px-4 py-2.5 rounded-xl bg-slate-100 text-slate-700 font-bold text-xs flex items-center gap-1.5"
+              className="px-4 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs flex items-center justify-center gap-1.5 transition-colors"
             >
               <ArrowLeft className="w-4 h-4" />
               <span>Web Utama</span>
@@ -108,6 +128,61 @@ export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children, allowe
     );
   }
 
-  // 5. Authorized
+  // 5. Khusus Siswa: Validasi Profil Akademik & Status Akun (1 Siswa = 1 Akun Aktif)
+  if (currentRole === 'student') {
+    // Akun auth belum memiliki tautan record di tabel students
+    if (!studentData) {
+      return (
+        <div className="min-h-screen bg-[#f8fafc] flex flex-col items-center justify-center p-4">
+          <div className="max-w-md w-full bg-white rounded-3xl p-6 sm:p-8 shadow-xl border border-amber-200 text-center">
+            <div className="w-14 h-14 bg-amber-100 text-amber-700 rounded-2xl flex items-center justify-center mx-auto mb-4">
+              <ShieldAlert className="w-7 h-7" />
+            </div>
+            <h2 className="text-xl font-extrabold text-slate-900 mb-2">Profil Siswa Belum Ditautkan</h2>
+            <p className="text-xs text-slate-600 leading-relaxed mb-6">
+              Akun autentikasi Anda (<span className="font-semibold text-slate-800">{user.email}</span>) telah terdaftar, namun belum memiliki profil akademik siswa yang tertaut di basis data sekolah.
+              <br /><br />
+              Silakan hubungi bagian Tata Usaha / Administrator SDI SAIQ AL-HIKMAH untuk mengaitkan akun Anda dengan NIS dan kelas yang sah.
+            </p>
+            <div className="space-y-2">
+              <button
+                onClick={() => signOut('/login/siswa')}
+                className="w-full py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs transition-colors"
+              >
+                Keluar & Ganti Akun
+              </button>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    // Akun dinonaktifkan oleh administrator
+    if (studentData.status === 'inactive') {
+      return (
+        <div className="min-h-screen bg-[#f8fafc] flex flex-col items-center justify-center p-4">
+          <div className="max-w-md w-full bg-white rounded-3xl p-6 sm:p-8 shadow-xl border border-rose-200 text-center">
+            <div className="w-14 h-14 bg-rose-100 text-rose-700 rounded-2xl flex items-center justify-center mx-auto mb-4">
+              <ShieldAlert className="w-7 h-7" />
+            </div>
+            <h2 className="text-xl font-extrabold text-slate-900 mb-2">Akun Siswa Dinonaktifkan</h2>
+            <p className="text-xs text-slate-600 leading-relaxed mb-6">
+              Status akun siswa ananda <strong className="text-slate-800">{studentData.name}</strong> (NIS: {studentData.nis}) saat ini berstatus <strong>NONAKTIF</strong>.
+              <br /><br />
+              Akses ke ruang portal nilai dibatasi. Silakan hubungi bagian administrasi madrasah untuk mengaktifkan kembali akun ananda.
+            </p>
+            <button
+              onClick={() => signOut('/login/siswa')}
+              className="w-full py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs transition-colors"
+            >
+              Keluar dari Sistem
+            </button>
+          </div>
+        </div>
+      );
+    }
+  }
+
+  // 6. Authorized & Validated
   return <>{children}</>;
 };

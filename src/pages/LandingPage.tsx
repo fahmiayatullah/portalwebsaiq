@@ -670,17 +670,17 @@ export const LandingPage: React.FC = () => {
               </div>
               <div className="flex items-center gap-2.5 text-xs text-slate-400">
                 <Mail className="w-4 h-4 text-emerald-500 shrink-0" />
-                <span>info@sdisaiqalhikmah.sch.id</span>
+                <span>info@sdisaiqalhiqmah.sch.id</span>
               </div>
             </div>
           </div>
 
           <div className="border-t border-slate-800 pt-6 flex flex-col sm:flex-row justify-between items-center text-xs text-slate-500 gap-3">
             <div>
-              &copy; {new Date().getFullYear()} SDI SAIQ AL-HIKMAH. Hak cipta dilindungi undang-undang.
+              &copy; {new Date().getFullYear()} SDI SAIQ AL-HIQMAH. Hak cipta dilindungi undang-undang.
             </div>
             <div className="flex gap-4">
-              <span>Berbasis Vercel & Supabase</span>
+              <span>Berbasis web</span>
               <span>•</span>
               <span>Portal Informasi Terpadu</span>
             </div>

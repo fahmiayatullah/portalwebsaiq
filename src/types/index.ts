@@ -38,12 +38,36 @@ export interface Student {
   auth_user_id: string;
   nis: string;
   name: string;
+  email?: string;
   class_id?: string | null;
   className?: string; // Resolved from classes
   photo_url?: string | null;
   status: 'active' | 'inactive' | 'graduated';
   created_at?: string;
   updated_at?: string;
+}
+
+export interface StudentAccountInfo {
+  id: string;
+  auth_user_id: string;
+  nis: string;
+  name: string;
+  email?: string;
+  className: string;
+  status: 'active' | 'inactive' | 'graduated';
+  hasLinkedAuth: boolean;
+  created_at?: string;
+}
+
+export interface SubjectGradeRecap {
+  subjectId: string;
+  subjectCode: string;
+  subjectName: string;
+  category: string;
+  grades: Grade[];
+  averageScore: number;
+  finalScore?: number;
+  teacherNote?: string;
 }
 
 export interface Grade {
@@ -55,6 +79,8 @@ export interface Grade {
   score: number;
   description?: string | null;
   assessment_date: string;
+  semester?: string;
+  academic_year?: string;
   status: 'draft' | 'published';
   published_at?: string | null;
   created_at?: string;
@@ -66,6 +92,8 @@ export interface Grade {
   subject_name?: string;
   teacher_name?: string;
   student_name?: string;
+  student_nis?: string;
+  student_class_id?: string | null;
 }
 
 export interface TeacherNote {

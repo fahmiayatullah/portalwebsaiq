@@ -3,7 +3,8 @@ import {
   ShieldCheck, Users, UserCheck, BookOpen, Layers,
   Activity, School, Plus, ExternalLink, Loader2, AlertCircle,
   CheckCircle2, Trash2, Calendar, Newspaper, ArrowRight,
-  GraduationCap
+  Search, Filter, KeyRound, Mail,
+  ToggleLeft, ToggleRight, FileSpreadsheet, Lock
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { supabase } from '../lib/supabase';
@@ -17,11 +18,41 @@ import {
   getStoredAgendas, addStoredAgenda, deleteStoredAgenda
 } from '../services/articleService';
 
-type AdminTab = 'dashboard' | 'siswa' | 'guru' | 'kelas' | 'mapel' | 'artikel' | 'aktivitas' | 'profil-sekolah';
+export type AdminTab =
+  | 'dashboard'
+  | 'siswa'
+  | 'akun'
+  | 'nilai'
+  | 'guru'
+  | 'kelas'
+  | 'mapel'
+  | 'artikel'
+  | 'aktivitas'
+  | 'profil-sekolah';
 
 export const AdminPortal: React.FC = () => {
-  const { externalExamUrl, navigate, user } = useAuth();
-  const [activeTab, setActiveTab] = useState<AdminTab>('dashboard');
+  const { externalExamUrl, navigate, currentPath, user } = useAuth();
+
+  // URL Route Synchronization for Admin Portal
+  const getTabFromPath = (): AdminTab => {
+    if (currentPath === '/portal/admin/siswa') return 'siswa';
+    if (currentPath === '/portal/admin/akun') return 'akun';
+    if (currentPath === '/portal/admin/nilai') return 'nilai';
+    if (currentPath === '/portal/admin/guru') return 'guru';
+    if (currentPath === '/portal/admin/kelas') return 'kelas';
+    if (currentPath === '/portal/admin/mapel') return 'mapel';
+    if (currentPath === '/portal/admin/artikel') return 'artikel';
+    if (currentPath === '/portal/admin/aktivitas') return 'nilai';
+    if (currentPath === '/portal/admin/profil-sekolah') return 'profil-sekolah';
+    return 'dashboard';
+  };
+
+  const activeTab = getTabFromPath();
+
+  const handleTabChange = (tab: AdminTab) => {
+    if (tab === 'dashboard') navigate('/portal/admin');
+    else navigate(`/portal/admin/${tab}`);
+  };
 
   const [students, setStudents] = useState<Student[]>([]);
   const [teachers, setTeachers] = useState<Teacher[]>([]);
@@ -36,6 +67,19 @@ export const AdminPortal: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState(false);
   const [feedback, setFeedback] = useState<{ type: 'error' | 'success'; message: string } | null>(null);
+
+  // Search & Filter States
+  const [studentSearch, setStudentSearch] = useState('');
+  const [studentClassFilter, setStudentClassFilter] = useState('all');
+  const [studentStatusFilter, setStudentStatusFilter] = useState('all');
+
+  const [accountSearch, setAccountSearch] = useState('');
+  const [accountStatusFilter, setAccountStatusFilter] = useState('all');
+
+  const [gradeSearch, setGradeSearch] = useState('');
+  const [gradeSubjectFilter, setGradeSubjectFilter] = useState('all');
+  const [gradeClassFilter, setGradeClassFilter] = useState('all');
+  const [gradeStatusFilter, setGradeStatusFilter] = useState('all');
 
   // Modals state
   const [showAddStudent, setShowAddStudent] = useState(false);
@@ -112,7 +156,7 @@ export const AdminPortal: React.FC = () => {
         supabase.from('teachers').select('*').order('name', { ascending: true }),
         supabase.from('classes').select('*').order('level', { ascending: true }),
         supabase.from('subjects').select('*').order('name', { ascending: true }),
-        supabase.from('grades').select('*, students(name), teachers(name), subjects(name)').order('created_at', { ascending: false }).limit(50)
+        supabase.from('grades').select('*, students(name, nis, class_id), teachers(name), subjects(name)').order('created_at', { ascending: false }).limit(100)
       ]);
 
       if (stdData) {
@@ -133,6 +177,8 @@ export const AdminPortal: React.FC = () => {
         setGrades(grdData.map(g => ({
           ...g,
           student_name: (g as any).students?.name || 'Siswa',
+          student_nis: (g as any).students?.nis || '-',
+          student_class_id: (g as any).students?.class_id || null,
           teacher_name: (g as any).teachers?.name || 'Guru',
           subject_name: (g as any).subjects?.name || 'Mapel',
         })));
@@ -148,7 +194,7 @@ export const AdminPortal: React.FC = () => {
     loadAllData();
   }, []);
 
-  // 1. TAMBAH SISWA
+  // 1. TAMBAH SISWA BARU (Sistem 1 Siswa 1 Akun Resmi)
   const handleAddStudentSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newStudent.name || !newStudent.nis || !newStudent.email || !newStudent.password) {
@@ -158,6 +204,20 @@ export const AdminPortal: React.FC = () => {
 
     setActionLoading(true);
     try {
+      // 1. Validasi Keunikan NIS di Database
+      const { data: existingNis } = await supabase
+        .from('students')
+        .select('id, name')
+        .eq('nis', newStudent.nis.trim())
+        .maybeSingle();
+
+      if (existingNis) {
+        showNotification('error', `NIS ${newStudent.nis} sudah terdaftar atas nama siswa: ${existingNis.name}.`);
+        setActionLoading(false);
+        return;
+      }
+
+      // 2. Buat Akun via Supabase Edge Function (Auth Admin API)
       const { data, error } = await supabase.functions.invoke('create-student', {
         body: {
           email: newStudent.email.trim(),
@@ -169,31 +229,83 @@ export const AdminPortal: React.FC = () => {
       });
 
       if (error || data?.error) {
-        // Fallback: direct insert to students table
-        const { error: insertErr } = await supabase.from('students').insert({
-          name: newStudent.name.trim(),
-          nis: newStudent.nis.trim(),
-          class_id: newStudent.classId || null,
-          auth_user_id: user?.id || '00000000-0000-0000-0000-000000000000',
-          status: 'active',
-        });
-
-        if (insertErr) {
-          showNotification('error', `Gagal menambahkan siswa: ${insertErr.message}`);
-        } else {
-          showNotification('success', `Data siswa ${newStudent.name} (NIS: ${newStudent.nis}) berhasil ditambahkan ke database!`);
-          setShowAddStudent(false);
-          setNewStudent({ name: '', nis: '', email: '', password: '', classId: classes[0]?.id || '' });
-          loadAllData();
-        }
+        const errorMsg = data?.error || error?.message || 'Layanan pembuatan akun auth belum merespons.';
+        showNotification(
+          'error',
+          `Gagal membuat akun auth siswa: ${errorMsg}. Pastikan Supabase Edge Function 'create-student' telah aktif di server.`
+        );
       } else {
-        showNotification('success', `Akun siswa ${newStudent.name} (NIS: ${newStudent.nis}) berhasil dibuat via Edge Function!`);
+        showNotification(
+          'success',
+          `Akun siswa ${newStudent.name} (NIS: ${newStudent.nis}) berhasil dibuat dan ditautkan dengan aman ke Supabase Auth!`
+        );
         setShowAddStudent(false);
         setNewStudent({ name: '', nis: '', email: '', password: '', classId: classes[0]?.id || '' });
         loadAllData();
       }
     } catch {
       showNotification('error', 'Terjadi kesalahan jaringan saat membuat akun siswa.');
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  // 1.B TOGGLE STATUS AKUN SISWA (Aktif <-> Nonaktif)
+  const handleToggleStudentStatus = async (studentId: string, currentStatus: string, studentName: string) => {
+    const nextStatus = currentStatus === 'active' ? 'inactive' : 'active';
+    const actionText = nextStatus === 'inactive' ? 'MENONAKTIFKAN' : 'MENGAKTIFKAN KEMBALI';
+
+    if (!window.confirm(`Yakin ingin ${actionText} akun siswa ${studentName}? ${nextStatus === 'inactive' ? 'Siswa tidak akan dapat mengakses portal hasil belajar.' : 'Siswa akan dapat kembali masuk ke portal pribadinya.'}`)) {
+      return;
+    }
+
+    setActionLoading(true);
+    try {
+      const { error } = await supabase
+        .from('students')
+        .update({ status: nextStatus })
+        .eq('id', studentId);
+
+      if (error) {
+        showNotification('error', `Gagal mengubah status akun: ${error.message}`);
+      } else {
+        showNotification(
+          'success',
+          `Status akun ${studentName} berhasil diubah menjadi ${nextStatus === 'active' ? 'AKTIF' : 'NONAKTIF'}.`
+        );
+        loadAllData();
+      }
+    } catch {
+      showNotification('error', 'Kendala saat memperbarui status akun siswa.');
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  // 1.C RESET KATA SANDI SISWA
+  const handleResetStudentPassword = async (email: string, studentName: string) => {
+    if (!email) {
+      showNotification('error', `Email login untuk ${studentName} belum tercatat.`);
+      return;
+    }
+
+    if (!window.confirm(`Kirim tautan reset kata sandi akun ke email: ${email}?`)) {
+      return;
+    }
+
+    setActionLoading(true);
+    try {
+      const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), {
+        redirectTo: `${window.location.origin}/portal/reset-password`,
+      });
+
+      if (error) {
+        showNotification('error', `Gagal mengirim tautan reset: ${error.message}`);
+      } else {
+        showNotification('success', `Tautan reset sandi telah dikirim ke ${email}.`);
+      }
+    } catch {
+      showNotification('error', 'Kendala saat mengirim email reset sandi.');
     } finally {
       setActionLoading(false);
     }
@@ -443,6 +555,43 @@ export const AdminPortal: React.FC = () => {
     }
   };
 
+  // Filtered lists for Admin views
+  const filteredStudents = students.filter(s => {
+    const matchSearch = studentSearch === '' ||
+      s.name.toLowerCase().includes(studentSearch.toLowerCase()) ||
+      s.nis.toLowerCase().includes(studentSearch.toLowerCase());
+    const matchClass = studentClassFilter === 'all' || s.class_id === studentClassFilter;
+    const matchStatus = studentStatusFilter === 'all' || s.status === studentStatusFilter;
+    return matchSearch && matchClass && matchStatus;
+  });
+
+  const filteredAccounts = students.filter(s => {
+    const matchSearch = accountSearch === '' ||
+      s.name.toLowerCase().includes(accountSearch.toLowerCase()) ||
+      s.nis.toLowerCase().includes(accountSearch.toLowerCase()) ||
+      (s.email && s.email.toLowerCase().includes(accountSearch.toLowerCase()));
+    const matchStatus = accountStatusFilter === 'all' || s.status === accountStatusFilter;
+    return matchSearch && matchStatus;
+  });
+
+  const filteredGrades = grades.filter(g => {
+    const matchSearch = gradeSearch === '' ||
+      (g.student_name && g.student_name.toLowerCase().includes(gradeSearch.toLowerCase())) ||
+      (g.student_nis && g.student_nis.toLowerCase().includes(gradeSearch.toLowerCase())) ||
+      (g.teacher_name && g.teacher_name.toLowerCase().includes(gradeSearch.toLowerCase())) ||
+      (g.description && g.description.toLowerCase().includes(gradeSearch.toLowerCase()));
+    const matchSubject = gradeSubjectFilter === 'all' || g.subject_id === gradeSubjectFilter;
+    const matchClass = gradeClassFilter === 'all' || (g as any).student_class_id === gradeClassFilter;
+    const matchStatus = gradeStatusFilter === 'all' || g.status === gradeStatusFilter;
+    return matchSearch && matchSubject && matchClass && matchStatus;
+  });
+
+  const totalGrades = grades.length;
+  const avgGrade = totalGrades > 0
+    ? (grades.reduce((sum, g) => sum + Number(g.score || 0), 0) / totalGrades).toFixed(1)
+    : '0';
+  const publishedGrades = grades.filter(g => g.status === 'published').length;
+
   return (
     <div className="min-h-screen bg-[#f8fafc] text-slate-800 flex flex-col font-sans">
       <PortalHeader
@@ -451,40 +600,46 @@ export const AdminPortal: React.FC = () => {
         activeRole="admin"
       />
 
-      {/* Quick Navigation Toolbar to Guru & Murid portals */}
+      {/* Admin Information Bar */}
       <div className="bg-purple-900 text-white px-4 md:px-8 py-2.5 shadow-sm text-xs">
         <div className="container mx-auto flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-center gap-2 font-bold text-purple-200">
             <ShieldCheck className="w-4 h-4 text-purple-300" />
-            <span>Mode Super Administrator (Akses Penuh):</span>
+            <span>Portal Administrator SDI SAIQ Al-Hikmah &bull; Akses Manajemen Akademik</span>
           </div>
-          <div className="flex flex-wrap items-center gap-2">
-            <button
-              onClick={() => navigate('/portal/guru')}
-              className="px-3 py-1 rounded-lg bg-blue-600 hover:bg-blue-500 font-bold text-white transition-colors flex items-center gap-1.5"
-              title="Langsung Buka & Periksa Portal Guru"
-            >
-              <UserCheck className="w-3.5 h-3.5" />
-              <span>Buka Portal Guru</span>
-            </button>
-            <button
-              onClick={() => navigate('/portal/siswa')}
-              className="px-3 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-500 font-bold text-white transition-colors flex items-center gap-1.5"
-              title="Langsung Buka & Periksa Portal Siswa"
-            >
-              <GraduationCap className="w-3.5 h-3.5" />
-              <span>Buka Portal Siswa</span>
-            </button>
-            <button
-              onClick={() => navigate('/portal/wali')}
-              className="px-3 py-1 rounded-lg bg-amber-600 hover:bg-amber-500 font-bold text-white transition-colors flex items-center gap-1.5"
-              title="Langsung Buka Portal Wali Murid"
-            >
-              <Users className="w-3.5 h-3.5" />
-              <span>Buka Portal Wali</span>
-            </button>
+          <div className="flex flex-wrap items-center gap-2 text-purple-200 text-xs">
+            <span className="bg-purple-800/90 px-3 py-1 rounded-full font-mono text-[11px] border border-purple-700">
+              Role: Master Administrator
+            </span>
           </div>
         </div>
+      </div>
+
+      {/* Mobile Horizontal Tabs */}
+      <div className="md:hidden bg-white border-b border-slate-200 px-4 py-2 overflow-x-auto flex gap-2 no-scrollbar">
+        {[
+          { id: 'dashboard' as const, label: 'Dashboard' },
+          { id: 'siswa' as const, label: 'Siswa' },
+          { id: 'akun' as const, label: 'Akun Siswa' },
+          { id: 'nilai' as const, label: 'Nilai' },
+          { id: 'guru' as const, label: 'Guru' },
+          { id: 'kelas' as const, label: 'Kelas' },
+          { id: 'mapel' as const, label: 'Mapel' },
+          { id: 'artikel' as const, label: 'Berita' },
+          { id: 'profil-sekolah' as const, label: 'Profil' },
+        ].map(item => (
+          <button
+            key={item.id}
+            onClick={() => handleTabChange(item.id)}
+            className={`px-3 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition-all ${
+              activeTab === item.id
+                ? 'bg-purple-600 text-white shadow-sm'
+                : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+            }`}
+          >
+            {item.label}
+          </button>
+        ))}
       </div>
 
       <div className="flex-1 container mx-auto px-4 md:px-6 py-6 max-w-7xl flex flex-col md:flex-row gap-6">
@@ -505,16 +660,17 @@ export const AdminPortal: React.FC = () => {
               {[
                 { id: 'dashboard' as const, label: 'Dashboard Utama', icon: <Activity className="w-4 h-4" /> },
                 { id: 'siswa' as const, label: 'Kelola Siswa', icon: <Users className="w-4 h-4" />, count: students.length },
+                { id: 'akun' as const, label: 'Akun Login Siswa', icon: <KeyRound className="w-4 h-4" />, count: students.filter(s => s.auth_user_id).length },
+                { id: 'nilai' as const, label: 'Pengawasan Nilai', icon: <FileSpreadsheet className="w-4 h-4" />, count: grades.length },
                 { id: 'guru' as const, label: 'Kelola Guru', icon: <UserCheck className="w-4 h-4" />, count: teachers.length },
                 { id: 'kelas' as const, label: 'Kelas & Rombel', icon: <Layers className="w-4 h-4" />, count: classes.length },
                 { id: 'mapel' as const, label: 'Mata Pelajaran', icon: <BookOpen className="w-4 h-4" />, count: subjects.length },
                 { id: 'artikel' as const, label: 'Artikel & Agenda Depan', icon: <Newspaper className="w-4 h-4" />, count: articles.length + agendas.length },
-                { id: 'aktivitas' as const, label: 'Audit Penilaian Guru', icon: <Activity className="w-4 h-4" />, count: grades.length },
                 { id: 'profil-sekolah' as const, label: 'Profil Sekolah & CBT', icon: <School className="w-4 h-4" /> },
               ].map(item => (
                 <button
                   key={item.id}
-                  onClick={() => setActiveTab(item.id)}
+                  onClick={() => handleTabChange(item.id)}
                   className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-2xl text-xs font-bold transition-all ${
                     activeTab === item.id
                       ? 'bg-purple-600 text-white shadow-md shadow-purple-700/20'
@@ -562,19 +718,19 @@ export const AdminPortal: React.FC = () => {
                 </p>
 
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-6 pt-6 border-t border-white/20 text-xs">
-                  <div className="bg-white/10 rounded-2xl p-3.5 backdrop-blur-sm cursor-pointer hover:bg-white/20 transition-all" onClick={() => setActiveTab('siswa')}>
+                  <div className="bg-white/10 rounded-2xl p-3.5 backdrop-blur-sm cursor-pointer hover:bg-white/20 transition-all" onClick={() => handleTabChange('siswa')}>
                     <div className="text-purple-200 text-[10px] font-bold">TOTAL SISWA</div>
                     <div className="text-2xl font-black mt-0.5">{students.length}</div>
                   </div>
-                  <div className="bg-white/10 rounded-2xl p-3.5 backdrop-blur-sm cursor-pointer hover:bg-white/20 transition-all" onClick={() => setActiveTab('guru')}>
+                  <div className="bg-white/10 rounded-2xl p-3.5 backdrop-blur-sm cursor-pointer hover:bg-white/20 transition-all" onClick={() => handleTabChange('akun')}>
+                    <div className="text-purple-200 text-[10px] font-bold">AKUN SISWA</div>
+                    <div className="text-2xl font-black mt-0.5">{students.filter(s => s.auth_user_id).length}</div>
+                  </div>
+                  <div className="bg-white/10 rounded-2xl p-3.5 backdrop-blur-sm cursor-pointer hover:bg-white/20 transition-all" onClick={() => handleTabChange('guru')}>
                     <div className="text-purple-200 text-[10px] font-bold">TOTAL GURU</div>
                     <div className="text-2xl font-black mt-0.5">{teachers.length}</div>
                   </div>
-                  <div className="bg-white/10 rounded-2xl p-3.5 backdrop-blur-sm cursor-pointer hover:bg-white/20 transition-all" onClick={() => setActiveTab('artikel')}>
-                    <div className="text-purple-200 text-[10px] font-bold">BERITA & AGENDA</div>
-                    <div className="text-2xl font-black mt-0.5">{articles.length + agendas.length}</div>
-                  </div>
-                  <div className="bg-white/10 rounded-2xl p-3.5 backdrop-blur-sm cursor-pointer hover:bg-white/20 transition-all" onClick={() => setActiveTab('aktivitas')}>
+                  <div className="bg-white/10 rounded-2xl p-3.5 backdrop-blur-sm cursor-pointer hover:bg-white/20 transition-all" onClick={() => handleTabChange('nilai')}>
                     <div className="text-purple-200 text-[10px] font-bold">NILAI TERCATAT</div>
                     <div className="text-2xl font-black mt-0.5">{grades.length}</div>
                   </div>
@@ -597,29 +753,29 @@ export const AdminPortal: React.FC = () => {
                 </button>
 
                 <button
-                  onClick={() => navigate('/portal/guru')}
+                  onClick={() => handleTabChange('akun')}
                   className="bg-white p-5 rounded-3xl border border-slate-200/80 shadow-sm hover:shadow-md transition-all text-left group"
                 >
-                  <div className="w-10 h-10 rounded-2xl bg-blue-50 text-blue-600 flex items-center justify-center font-bold mb-2">
-                    <UserCheck className="w-5 h-5" />
+                  <div className="w-10 h-10 rounded-2xl bg-purple-50 text-purple-600 flex items-center justify-center font-bold mb-2">
+                    <KeyRound className="w-5 h-5" />
                   </div>
-                  <h3 className="font-extrabold text-sm text-slate-900 group-hover:text-blue-700 transition-colors">
-                    Periksa Portal Guru
+                  <h3 className="font-extrabold text-sm text-slate-900 group-hover:text-purple-700 transition-colors">
+                    Kelola Akun Siswa
                   </h3>
-                  <p className="text-xs text-slate-500 mt-0.5">Langsung input nilai & catatan guru</p>
+                  <p className="text-xs text-slate-500 mt-0.5">Sistem 1 Siswa 1 Akun & kelola hak akses</p>
                 </button>
 
                 <button
-                  onClick={() => navigate('/portal/siswa')}
+                  onClick={() => handleTabChange('nilai')}
                   className="bg-white p-5 rounded-3xl border border-slate-200/80 shadow-sm hover:shadow-md transition-all text-left group"
                 >
                   <div className="w-10 h-10 rounded-2xl bg-emerald-50 text-emerald-600 flex items-center justify-center font-bold mb-2">
-                    <GraduationCap className="w-5 h-5" />
+                    <FileSpreadsheet className="w-5 h-5" />
                   </div>
                   <h3 className="font-extrabold text-sm text-slate-900 group-hover:text-emerald-700 transition-colors">
-                    Inspeksi Portal Siswa
+                    Pengawasan Nilai
                   </h3>
-                  <p className="text-xs text-slate-500 mt-0.5">Lihat transparansi nilai & catatan siswa</p>
+                  <p className="text-xs text-slate-500 mt-0.5">Audit & pantau nilai santri seluruh mapel</p>
                 </button>
               </div>
 
@@ -630,7 +786,7 @@ export const AdminPortal: React.FC = () => {
                     <Activity className="w-4 h-4 text-purple-600" />
                     <span>Audit Trail: Aktivitas Penilaian Guru Terakhir</span>
                   </h3>
-                  <button onClick={() => setActiveTab('aktivitas')} className="text-xs font-bold text-purple-600 hover:text-purple-800 flex items-center gap-1">
+                  <button onClick={() => handleTabChange('nilai')} className="text-xs font-bold text-purple-600 hover:text-purple-800 flex items-center gap-1">
                     <span>Lihat Semua</span>
                     <ArrowRight className="w-3.5 h-3.5" />
                   </button>
@@ -671,7 +827,33 @@ export const AdminPortal: React.FC = () => {
           {/* ==================== 2. KELOLA SISWA ==================== */}
           {activeTab === 'siswa' && (
             <div className="space-y-4">
-              <div className="bg-white rounded-3xl p-6 shadow-sm border border-slate-200/80">
+              {/* Summary Cards */}
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                <div className="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-sm">
+                  <div className="text-[11px] font-bold text-slate-400 uppercase">Total Siswa</div>
+                  <div className="text-2xl font-black text-slate-900 mt-1">{students.length}</div>
+                </div>
+                <div className="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-sm">
+                  <div className="text-[11px] font-bold text-emerald-600 uppercase">Siswa Aktif</div>
+                  <div className="text-2xl font-black text-emerald-700 mt-1">
+                    {students.filter(s => s.status === 'active').length}
+                  </div>
+                </div>
+                <div className="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-sm">
+                  <div className="text-[11px] font-bold text-rose-500 uppercase">Siswa Nonaktif</div>
+                  <div className="text-2xl font-black text-rose-600 mt-1">
+                    {students.filter(s => s.status === 'inactive').length}
+                  </div>
+                </div>
+                <div className="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-sm">
+                  <div className="text-[11px] font-bold text-purple-600 uppercase">Akun Terhubung</div>
+                  <div className="text-2xl font-black text-purple-700 mt-1">
+                    {students.filter(s => !!s.auth_user_id).length}
+                  </div>
+                </div>
+              </div>
+
+              <div className="bg-white rounded-3xl p-6 shadow-sm border border-slate-200/80 space-y-4">
                 <div className="flex flex-wrap justify-between items-center gap-3 pb-4 border-b border-slate-100">
                   <div>
                     <h2 className="text-xl font-extrabold text-slate-900 flex items-center gap-2">
@@ -682,13 +864,73 @@ export const AdminPortal: React.FC = () => {
                       Kelola identitas, NIS, rombel kelas, dan status keaktifan seluruh santri/siswa.
                     </p>
                   </div>
-                  <button
-                    onClick={() => setShowAddStudent(true)}
-                    className="px-4 py-2.5 rounded-xl bg-purple-600 hover:bg-purple-700 text-white font-bold text-xs flex items-center gap-1.5 shadow-md transition-all"
-                  >
-                    <Plus className="w-4 h-4" />
-                    <span>Tambah Siswa Baru</span>
-                  </button>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => handleTabChange('akun')}
+                      className="px-3.5 py-2.5 rounded-xl border border-purple-200 bg-purple-50 hover:bg-purple-100 text-purple-700 font-bold text-xs flex items-center gap-1.5 transition-all"
+                    >
+                      <KeyRound className="w-4 h-4" />
+                      <span>Kelola Akun Siswa</span>
+                    </button>
+                    <button
+                      onClick={() => setShowAddStudent(true)}
+                      className="px-4 py-2.5 rounded-xl bg-purple-600 hover:bg-purple-700 text-white font-bold text-xs flex items-center gap-1.5 shadow-md transition-all"
+                    >
+                      <Plus className="w-4 h-4" />
+                      <span>Tambah Siswa Baru</span>
+                    </button>
+                  </div>
+                </div>
+
+                {/* Filter and Search Bar */}
+                <div className="flex flex-wrap items-center gap-3 bg-slate-50 p-3.5 rounded-2xl border border-slate-200/80 text-xs">
+                  <div className="relative flex-1 min-w-[220px]">
+                    <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                    <input
+                      type="text"
+                      value={studentSearch}
+                      onChange={e => setStudentSearch(e.target.value)}
+                      placeholder="Cari nama atau NIS siswa..."
+                      className="w-full pl-9 pr-3 py-2 rounded-xl border border-slate-200 bg-white text-xs text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-purple-500/20"
+                    />
+                  </div>
+
+                  <div className="flex items-center gap-2 shrink-0">
+                    <Filter className="w-3.5 h-3.5 text-slate-400" />
+                    <select
+                      value={studentClassFilter}
+                      onChange={e => setStudentClassFilter(e.target.value)}
+                      className="px-3 py-2 rounded-xl border border-slate-200 bg-white text-xs font-semibold text-slate-700 focus:outline-none"
+                    >
+                      <option value="all">Semua Rombel Kelas</option>
+                      {classes.map(c => (
+                        <option key={c.id} value={c.id}>{c.name}</option>
+                      ))}
+                    </select>
+
+                    <select
+                      value={studentStatusFilter}
+                      onChange={e => setStudentStatusFilter(e.target.value)}
+                      className="px-3 py-2 rounded-xl border border-slate-200 bg-white text-xs font-semibold text-slate-700 focus:outline-none"
+                    >
+                      <option value="all">Semua Status</option>
+                      <option value="active">Aktif</option>
+                      <option value="inactive">Nonaktif</option>
+                    </select>
+
+                    {(studentSearch || studentClassFilter !== 'all' || studentStatusFilter !== 'all') && (
+                      <button
+                        onClick={() => {
+                          setStudentSearch('');
+                          setStudentClassFilter('all');
+                          setStudentStatusFilter('all');
+                        }}
+                        className="px-2.5 py-2 text-xs font-bold text-slate-500 hover:text-slate-800 underline"
+                      >
+                        Reset
+                      </button>
+                    )}
+                  </div>
                 </div>
 
                 {loading ? (
@@ -697,44 +939,296 @@ export const AdminPortal: React.FC = () => {
                     <span>Memuat data siswa dari Supabase...</span>
                   </div>
                 ) : (
-                  <div className="overflow-x-auto mt-4">
+                  <div className="overflow-x-auto">
                     <table className="w-full text-left text-xs">
                       <thead>
                         <tr className="bg-slate-50 text-slate-600 border-b border-slate-200 uppercase font-extrabold text-[11px]">
                           <th className="py-3 px-4 rounded-l-xl">Nama Siswa</th>
                           <th className="py-3 px-3">NIS</th>
-                          <th className="py-3 px-3">Kelas</th>
-                          <th className="py-3 px-3">Status</th>
+                          <th className="py-3 px-3">Kelas / Rombel</th>
+                          <th className="py-3 px-3">Akun Login</th>
+                          <th className="py-3 px-3">Status Akses</th>
                           <th className="py-3 px-3 rounded-r-xl text-center">Tindakan</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-100">
-                        {students.length === 0 ? (
+                        {filteredStudents.length === 0 ? (
                           <tr>
-                            <td colSpan={5} className="py-8 text-center text-slate-400">Belum ada data siswa terdaftar.</td>
+                            <td colSpan={6} className="py-8 text-center text-slate-400">
+                              Tidak ada siswa yang sesuai dengan filter pencarian.
+                            </td>
                           </tr>
                         ) : (
-                          students.map(s => (
+                          filteredStudents.map(s => (
                             <tr key={s.id} className="hover:bg-purple-50/30 transition-colors">
-                              <td className="py-3 px-4 font-bold text-slate-900">{s.name}</td>
+                              <td className="py-3 px-4">
+                                <div className="font-bold text-slate-900">{s.name}</div>
+                                <div className="text-[10px] text-slate-400 font-mono">ID: {s.id.slice(0, 8)}...</div>
+                              </td>
                               <td className="py-3 px-3 font-mono font-bold text-purple-800">{s.nis}</td>
-                              <td className="py-3 px-3 text-slate-600">{s.className}</td>
-                              <td className="py-3 px-3">
-                                <span className="bg-emerald-100 text-emerald-800 text-[10px] font-bold px-2 py-0.5 rounded-full uppercase">
-                                  {s.status}
+                              <td className="py-3 px-3 text-slate-600">
+                                <span className="inline-block bg-slate-100 px-2 py-0.5 rounded-lg text-slate-700 font-medium">
+                                  {s.className}
                                 </span>
+                              </td>
+                              <td className="py-3 px-3">
+                                {s.auth_user_id ? (
+                                  <span className="inline-flex items-center gap-1 bg-emerald-50 text-emerald-700 border border-emerald-200 text-[10px] font-bold px-2 py-0.5 rounded-full">
+                                    <CheckCircle2 className="w-3 h-3" />
+                                    <span>Terkait</span>
+                                  </span>
+                                ) : (
+                                  <span className="inline-flex items-center gap-1 bg-amber-50 text-amber-700 border border-amber-200 text-[10px] font-bold px-2 py-0.5 rounded-full">
+                                    <AlertCircle className="w-3 h-3" />
+                                    <span>Belum Terkait</span>
+                                  </span>
+                                )}
+                              </td>
+                              <td className="py-3 px-3">
+                                <button
+                                  onClick={() => handleToggleStudentStatus(s.id, s.status, s.name)}
+                                  disabled={actionLoading}
+                                  className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold transition-all ${
+                                    s.status === 'active'
+                                      ? 'bg-emerald-100 text-emerald-800 hover:bg-emerald-200'
+                                      : 'bg-rose-100 text-rose-800 hover:bg-rose-200'
+                                  }`}
+                                  title="Klik untuk mengubah status akses portal"
+                                >
+                                  {s.status === 'active' ? (
+                                    <>
+                                      <ToggleRight className="w-4 h-4 text-emerald-600" />
+                                      <span>Aktif</span>
+                                    </>
+                                  ) : (
+                                    <>
+                                      <ToggleLeft className="w-4 h-4 text-rose-600" />
+                                      <span>Nonaktif</span>
+                                    </>
+                                  )}
+                                </button>
                               </td>
                               <td className="py-3 px-3 text-center">
                                 <button
                                   onClick={() => handleDeleteStudent(s.id, s.name)}
                                   className="p-1.5 text-rose-500 hover:text-rose-700 hover:bg-rose-50 rounded-lg transition-colors"
-                                  title="Hapus Siswa"
+                                  title="Hapus Data Siswa"
                                 >
                                   <Trash2 className="w-4 h-4" />
                                 </button>
                               </td>
                             </tr>
                           ))
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* ==================== 2.B KELOLA AKUN SISWA (SISTEM 1 SISWA 1 AKUN) ==================== */}
+          {activeTab === 'akun' && (
+            <div className="space-y-4">
+              {/* Security Policy Information Banner */}
+              <div className="bg-gradient-to-r from-purple-800 to-indigo-900 rounded-3xl p-6 text-white shadow-lg space-y-2">
+                <div className="flex items-center gap-2 text-purple-200 font-bold text-xs uppercase tracking-wider">
+                  <Lock className="w-4 h-4 text-purple-300" />
+                  <span>Sistem Keamanan 1 Siswa 1 Akun (Database Level)</span>
+                </div>
+                <h2 className="text-xl md:text-2xl font-black">
+                  Manajemen Kredensial & Hak Akses Portal Siswa
+                </h2>
+                <p className="text-xs text-purple-100 max-w-3xl leading-relaxed">
+                  Setiap akun autentikasi dihubungkan secara eksklusif ke 1 data siswa melalui foreign key <code className="bg-purple-950/60 px-1.5 py-0.5 rounded font-mono text-purple-200">auth_user_id</code>.
+                  Siswa tidak dapat mengakses nilai atau data siswa lain. Akun dengan status <strong>Nonaktif</strong> secara otomatis diblokir saat autentikasi.
+                </p>
+              </div>
+
+              {/* Account Metrics */}
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                <div className="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-sm">
+                  <div className="text-[11px] font-bold text-slate-400 uppercase">Total Akun Siswa</div>
+                  <div className="text-2xl font-black text-slate-900 mt-1">{students.length}</div>
+                </div>
+                <div className="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-sm">
+                  <div className="text-[11px] font-bold text-emerald-600 uppercase">Akun Aktif</div>
+                  <div className="text-2xl font-black text-emerald-700 mt-1">
+                    {students.filter(s => s.status === 'active').length}
+                  </div>
+                </div>
+                <div className="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-sm">
+                  <div className="text-[11px] font-bold text-rose-500 uppercase">Akun Dinonaktifkan</div>
+                  <div className="text-2xl font-black text-rose-600 mt-1">
+                    {students.filter(s => s.status === 'inactive').length}
+                  </div>
+                </div>
+                <div className="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-sm">
+                  <div className="text-[11px] font-bold text-purple-600 uppercase">Terkoneksi Auth UID</div>
+                  <div className="text-2xl font-black text-purple-700 mt-1">
+                    {students.filter(s => !!s.auth_user_id).length}
+                  </div>
+                </div>
+              </div>
+
+              {/* Accounts Table Container */}
+              <div className="bg-white rounded-3xl p-6 shadow-sm border border-slate-200/80 space-y-4">
+                <div className="flex flex-wrap justify-between items-center gap-3 pb-4 border-b border-slate-100">
+                  <div>
+                    <h3 className="text-base font-extrabold text-slate-900 flex items-center gap-2">
+                      <KeyRound className="w-5 h-5 text-purple-600" />
+                      <span>Daftar Akun Autentikasi Siswa</span>
+                    </h3>
+                    <p className="text-xs text-slate-500 mt-0.5">
+                      Kelola status izin masuk portal pribadi dan reset kata sandi siswa.
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => setShowAddStudent(true)}
+                    className="px-4 py-2.5 rounded-xl bg-purple-600 hover:bg-purple-700 text-white font-bold text-xs flex items-center gap-1.5 shadow-md transition-all"
+                  >
+                    <Plus className="w-4 h-4" />
+                    <span>Buat Akun Siswa Baru</span>
+                  </button>
+                </div>
+
+                {/* Filter and Search Bar for Accounts */}
+                <div className="flex flex-wrap items-center gap-3 bg-slate-50 p-3.5 rounded-2xl border border-slate-200/80 text-xs">
+                  <div className="relative flex-1 min-w-[220px]">
+                    <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                    <input
+                      type="text"
+                      value={accountSearch}
+                      onChange={e => setAccountSearch(e.target.value)}
+                      placeholder="Cari berdasarkan nama, NIS, atau email..."
+                      className="w-full pl-9 pr-3 py-2 rounded-xl border border-slate-200 bg-white text-xs text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-purple-500/20"
+                    />
+                  </div>
+
+                  <div className="flex items-center gap-2 shrink-0">
+                    <Filter className="w-3.5 h-3.5 text-slate-400" />
+                    <select
+                      value={accountStatusFilter}
+                      onChange={e => setAccountStatusFilter(e.target.value)}
+                      className="px-3 py-2 rounded-xl border border-slate-200 bg-white text-xs font-semibold text-slate-700 focus:outline-none"
+                    >
+                      <option value="all">Semua Status Akun</option>
+                      <option value="active">Hanya Akun Aktif</option>
+                      <option value="inactive">Hanya Akun Nonaktif</option>
+                    </select>
+
+                    {(accountSearch || accountStatusFilter !== 'all') && (
+                      <button
+                        onClick={() => {
+                          setAccountSearch('');
+                          setAccountStatusFilter('all');
+                        }}
+                        className="px-2.5 py-2 text-xs font-bold text-slate-500 hover:text-slate-800 underline"
+                      >
+                        Reset
+                      </button>
+                    )}
+                  </div>
+                </div>
+
+                {loading ? (
+                  <div className="py-16 text-center text-xs text-slate-400 flex flex-col items-center justify-center">
+                    <Loader2 className="w-8 h-8 animate-spin text-purple-600 mb-2" />
+                    <span>Memuat daftar akun siswa...</span>
+                  </div>
+                ) : (
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left text-xs">
+                      <thead>
+                        <tr className="bg-slate-50 text-slate-600 border-b border-slate-200 uppercase font-extrabold text-[11px]">
+                          <th className="py-3 px-4 rounded-l-xl">Identitas Siswa</th>
+                          <th className="py-3 px-3">Email Login</th>
+                          <th className="py-3 px-3">Supabase Auth ID (UID)</th>
+                          <th className="py-3 px-3">Status Izin Akses</th>
+                          <th className="py-3 px-3 rounded-r-xl text-center">Tindakan Kelola</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100">
+                        {filteredAccounts.length === 0 ? (
+                          <tr>
+                            <td colSpan={5} className="py-8 text-center text-slate-400">
+                              Tidak ada akun yang sesuai dengan kriteria pencarian.
+                            </td>
+                          </tr>
+                        ) : (
+                          filteredAccounts.map(s => {
+                            const studentEmail = s.email || `${s.nis.toLowerCase()}@siswa.saiq.sch.id`;
+                            return (
+                              <tr key={s.id} className="hover:bg-purple-50/30 transition-colors">
+                                <td className="py-3 px-4">
+                                  <div className="font-bold text-slate-900">{s.name}</div>
+                                  <div className="text-[11px] text-purple-800 font-mono font-bold">NIS: {s.nis}</div>
+                                  <div className="text-[10px] text-slate-400">{s.className}</div>
+                                </td>
+                                <td className="py-3 px-3 font-mono text-slate-700">
+                                  <div className="flex items-center gap-1.5">
+                                    <Mail className="w-3.5 h-3.5 text-slate-400" />
+                                    <span>{studentEmail}</span>
+                                  </div>
+                                </td>
+                                <td className="py-3 px-3 font-mono text-[11px]">
+                                  {s.auth_user_id ? (
+                                    <span className="bg-slate-100 text-slate-600 px-2 py-0.5 rounded border border-slate-200" title={s.auth_user_id}>
+                                      {s.auth_user_id.slice(0, 13)}...
+                                    </span>
+                                  ) : (
+                                    <span className="text-amber-600 italic">Belum dibuatkan UID</span>
+                                  )}
+                                </td>
+                                <td className="py-3 px-3">
+                                  <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-extrabold uppercase ${
+                                    s.status === 'active'
+                                      ? 'bg-emerald-100 text-emerald-800 border border-emerald-200'
+                                      : 'bg-rose-100 text-rose-800 border border-rose-200'
+                                  }`}>
+                                    {s.status === 'active' ? 'Aktif (Diberi Akses)' : 'Nonaktif (Diblokir)'}
+                                  </span>
+                                </td>
+                                <td className="py-3 px-3 text-center">
+                                  <div className="flex items-center justify-center gap-2">
+                                    <button
+                                      onClick={() => handleToggleStudentStatus(s.id, s.status, s.name)}
+                                      disabled={actionLoading}
+                                      className={`px-3 py-1.5 rounded-xl font-bold text-[11px] transition-all flex items-center gap-1 ${
+                                        s.status === 'active'
+                                          ? 'bg-rose-50 text-rose-700 hover:bg-rose-100 border border-rose-200'
+                                          : 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200'
+                                      }`}
+                                      title={s.status === 'active' ? 'Nonaktifkan akun ini' : 'Aktifkan kembali akun ini'}
+                                    >
+                                      {s.status === 'active' ? (
+                                        <>
+                                          <ToggleLeft className="w-3.5 h-3.5" />
+                                          <span>Nonaktifkan</span>
+                                        </>
+                                      ) : (
+                                        <>
+                                          <ToggleRight className="w-3.5 h-3.5" />
+                                          <span>Aktifkan</span>
+                                        </>
+                                      )}
+                                    </button>
+
+                                    <button
+                                      onClick={() => handleResetStudentPassword(studentEmail, s.name)}
+                                      disabled={actionLoading}
+                                      className="px-2.5 py-1.5 rounded-xl bg-slate-100 text-slate-700 hover:bg-slate-200 font-bold text-[11px] transition-all flex items-center gap-1 border border-slate-200"
+                                      title="Kirim email instruksi reset kata sandi"
+                                    >
+                                      <KeyRound className="w-3 h-3 text-slate-500" />
+                                      <span>Reset Sandi</span>
+                                    </button>
+                                  </div>
+                                </td>
+                              </tr>
+                            );
+                          })
                         )}
                       </tbody>
                     </table>
@@ -1032,70 +1526,176 @@ export const AdminPortal: React.FC = () => {
             </div>
           )}
 
-          {/* ==================== 7. AUDIT PENILAIAN ==================== */}
-          {activeTab === 'aktivitas' && (
+          {/* ==================== 7. AUDIT & PENGAWASAN NILAI ==================== */}
+          {(activeTab === 'nilai' || activeTab === 'aktivitas') && (
             <div className="space-y-4">
-              <div className="bg-white rounded-3xl p-6 shadow-sm border border-slate-200/80">
-                <div className="pb-4 border-b border-slate-100">
-                  <h2 className="text-xl font-extrabold text-slate-900 flex items-center gap-2">
-                    <Activity className="w-6 h-6 text-purple-600" />
-                    <span>Audit Penilaian Guru Seluruh Sekolah</span>
-                  </h2>
-                  <p className="text-xs text-slate-500 mt-0.5">
-                    Pengawasan transparan seluruh nilai yang diinput oleh dewan guru ke siswa.
-                  </p>
+              {/* Summary Cards */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div className="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-sm">
+                  <div className="text-[11px] font-bold text-slate-400 uppercase">Total Catatan Penilaian</div>
+                  <div className="text-2xl font-black text-slate-900 mt-1">{totalGrades}</div>
+                </div>
+                <div className="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-sm">
+                  <div className="text-[11px] font-bold text-emerald-600 uppercase">Nilai Terbit Resmi</div>
+                  <div className="text-2xl font-black text-emerald-700 mt-1">{publishedGrades}</div>
+                </div>
+                <div className="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-sm">
+                  <div className="text-[11px] font-bold text-purple-600 uppercase">Rata-rata Skor Sekolah</div>
+                  <div className="text-2xl font-black text-purple-700 mt-1">{avgGrade}</div>
+                </div>
+              </div>
+
+              <div className="bg-white rounded-3xl p-6 shadow-sm border border-slate-200/80 space-y-4">
+                <div className="pb-4 border-b border-slate-100 flex flex-wrap justify-between items-center gap-3">
+                  <div>
+                    <h2 className="text-xl font-extrabold text-slate-900 flex items-center gap-2">
+                      <FileSpreadsheet className="w-6 h-6 text-purple-600" />
+                      <span>Pengawasan & Rekap Nilai Akademik Siswa</span>
+                    </h2>
+                    <p className="text-xs text-slate-500 mt-0.5">
+                      Audit menyeluruh terhadap nilai tugas, PH, STS, dan SAS yang diinput dewan guru.
+                    </p>
+                  </div>
                 </div>
 
-                <div className="overflow-x-auto mt-4">
-                  <table className="w-full text-left text-xs">
-                    <thead>
-                      <tr className="bg-slate-50 text-slate-600 border-b border-slate-200 uppercase font-extrabold text-[11px]">
-                        <th className="py-3 px-4 rounded-l-xl">Siswa</th>
-                        <th className="py-3 px-3">Guru Pengampu</th>
-                        <th className="py-3 px-3">Mapel</th>
-                        <th className="py-3 px-3">Jenis</th>
-                        <th className="py-3 px-3 text-center">Skor</th>
-                        <th className="py-3 px-3">Tanggal</th>
-                        <th className="py-3 px-3">Status</th>
-                        <th className="py-3 px-3 rounded-r-xl text-center">Tindakan</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-100">
-                      {grades.length === 0 ? (
-                        <tr>
-                          <td colSpan={8} className="py-8 text-center text-slate-400">Belum ada catatan nilai.</td>
+                {/* Filter and Search Bar for Grades */}
+                <div className="flex flex-wrap items-center gap-3 bg-slate-50 p-3.5 rounded-2xl border border-slate-200/80 text-xs">
+                  <div className="relative flex-1 min-w-[200px]">
+                    <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                    <input
+                      type="text"
+                      value={gradeSearch}
+                      onChange={e => setGradeSearch(e.target.value)}
+                      placeholder="Cari siswa, NIS, guru, atau keterangan..."
+                      className="w-full pl-9 pr-3 py-2 rounded-xl border border-slate-200 bg-white text-xs text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-purple-500/20"
+                    />
+                  </div>
+
+                  <div className="flex flex-wrap items-center gap-2 shrink-0">
+                    <Filter className="w-3.5 h-3.5 text-slate-400" />
+                    <select
+                      value={gradeSubjectFilter}
+                      onChange={e => setGradeSubjectFilter(e.target.value)}
+                      className="px-3 py-2 rounded-xl border border-slate-200 bg-white text-xs font-semibold text-slate-700 focus:outline-none"
+                    >
+                      <option value="all">Semua Mapel</option>
+                      {subjects.map(s => (
+                        <option key={s.id} value={s.id}>{s.name}</option>
+                      ))}
+                    </select>
+
+                    <select
+                      value={gradeClassFilter}
+                      onChange={e => setGradeClassFilter(e.target.value)}
+                      className="px-3 py-2 rounded-xl border border-slate-200 bg-white text-xs font-semibold text-slate-700 focus:outline-none"
+                    >
+                      <option value="all">Semua Kelas</option>
+                      {classes.map(c => (
+                        <option key={c.id} value={c.id}>{c.name}</option>
+                      ))}
+                    </select>
+
+                    <select
+                      value={gradeStatusFilter}
+                      onChange={e => setGradeStatusFilter(e.target.value)}
+                      className="px-3 py-2 rounded-xl border border-slate-200 bg-white text-xs font-semibold text-slate-700 focus:outline-none"
+                    >
+                      <option value="all">Semua Status</option>
+                      <option value="published">Terbit Resmi</option>
+                      <option value="draft">Draft Guru</option>
+                    </select>
+
+                    {(gradeSearch || gradeSubjectFilter !== 'all' || gradeClassFilter !== 'all' || gradeStatusFilter !== 'all') && (
+                      <button
+                        onClick={() => {
+                          setGradeSearch('');
+                          setGradeSubjectFilter('all');
+                          setGradeClassFilter('all');
+                          setGradeStatusFilter('all');
+                        }}
+                        className="px-2.5 py-2 text-xs font-bold text-slate-500 hover:text-slate-800 underline"
+                      >
+                        Reset
+                      </button>
+                    )}
+                  </div>
+                </div>
+
+                {loading ? (
+                  <div className="py-16 text-center text-xs text-slate-400 flex flex-col items-center justify-center">
+                    <Loader2 className="w-8 h-8 animate-spin text-purple-600 mb-2" />
+                    <span>Memuat rekaman nilai dari Supabase...</span>
+                  </div>
+                ) : (
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left text-xs">
+                      <thead>
+                        <tr className="bg-slate-50 text-slate-600 border-b border-slate-200 uppercase font-extrabold text-[11px]">
+                          <th className="py-3 px-4 rounded-l-xl">Siswa</th>
+                          <th className="py-3 px-3">Guru Pengampu</th>
+                          <th className="py-3 px-3">Mapel</th>
+                          <th className="py-3 px-3">Jenis & Keterangan</th>
+                          <th className="py-3 px-3 text-center">Skor</th>
+                          <th className="py-3 px-3">Tanggal</th>
+                          <th className="py-3 px-3">Status</th>
+                          <th className="py-3 px-3 rounded-r-xl text-center">Tindakan</th>
                         </tr>
-                      ) : (
-                        grades.map(g => (
-                          <tr key={g.id} className="hover:bg-purple-50/30 transition-colors">
-                            <td className="py-3 px-4 font-bold text-slate-900">{g.student_name}</td>
-                            <td className="py-3 px-3 text-slate-700">{g.teacher_name}</td>
-                            <td className="py-3 px-3 font-semibold text-purple-800">{g.subject_name}</td>
-                            <td className="py-3 px-3 text-slate-500">{g.assessment_type}</td>
-                            <td className="py-3 px-3 text-center font-black font-mono text-emerald-800">{g.score}</td>
-                            <td className="py-3 px-3 font-mono text-[11px] text-slate-400">{g.assessment_date}</td>
-                            <td className="py-3 px-3">
-                              <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
-                                g.status === 'published' ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'
-                              }`}>
-                                {g.status === 'published' ? 'Terbit' : 'Draft'}
-                              </span>
-                            </td>
-                            <td className="py-3 px-3 text-center">
-                              <button
-                                onClick={() => handleDeleteGrade(g.id, g.student_name || 'Siswa', g.subject_name || 'Mapel')}
-                                className="p-1.5 text-rose-500 hover:text-rose-700 hover:bg-rose-50 rounded-lg transition-colors"
-                                title="Hapus Nilai"
-                              >
-                                <Trash2 className="w-4 h-4" />
-                              </button>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100">
+                        {filteredGrades.length === 0 ? (
+                          <tr>
+                            <td colSpan={8} className="py-8 text-center text-slate-400">
+                              Tidak ada catatan nilai yang cocok dengan filter pencarian.
                             </td>
                           </tr>
-                        ))
-                      )}
-                    </tbody>
-                  </table>
-                </div>
+                        ) : (
+                          filteredGrades.map(g => (
+                            <tr key={g.id} className="hover:bg-purple-50/30 transition-colors">
+                              <td className="py-3 px-4">
+                                <div className="font-bold text-slate-900">{g.student_name}</div>
+                                <div className="text-[10px] text-purple-800 font-mono">NIS: {g.student_nis}</div>
+                              </td>
+                              <td className="py-3 px-3 text-slate-700">{g.teacher_name}</td>
+                              <td className="py-3 px-3 font-semibold text-purple-800">{g.subject_name}</td>
+                              <td className="py-3 px-3">
+                                <div className="font-semibold text-slate-800">{g.assessment_type}</div>
+                                {g.description && <div className="text-[11px] text-slate-400 italic">{g.description}</div>}
+                              </td>
+                              <td className="py-3 px-3 text-center">
+                                <span className={`font-black font-mono px-2.5 py-1 rounded-lg text-xs ${
+                                  Number(g.score) >= 75
+                                    ? 'bg-emerald-100 text-emerald-800'
+                                    : Number(g.score) >= 60
+                                      ? 'bg-amber-100 text-amber-800'
+                                      : 'bg-rose-100 text-rose-800'
+                                }`}>
+                                  {g.score}
+                                </span>
+                              </td>
+                              <td className="py-3 px-3 font-mono text-[11px] text-slate-400">{g.assessment_date}</td>
+                              <td className="py-3 px-3">
+                                <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                                  g.status === 'published' ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'
+                                }`}>
+                                  {g.status === 'published' ? 'Terbit' : 'Draft'}
+                                </span>
+                              </td>
+                              <td className="py-3 px-3 text-center">
+                                <button
+                                  onClick={() => handleDeleteGrade(g.id, g.student_name || 'Siswa', g.subject_name || 'Mapel')}
+                                  className="p-1.5 text-rose-500 hover:text-rose-700 hover:bg-rose-50 rounded-lg transition-colors"
+                                  title="Hapus Nilai (Audit)"
+                                >
+                                  <Trash2 className="w-4 h-4" />
+                                </button>
+                              </td>
+                            </tr>
+                          ))
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
               </div>
             </div>
           )}

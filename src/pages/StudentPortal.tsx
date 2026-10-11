@@ -2,11 +2,13 @@ import React, { useState, useEffect } from 'react';
 import {
   Home, Award, MessageSquare, Megaphone,
   User, TrendingUp, CheckCircle2,
-  ExternalLink, ChevronRight, Eye, Check, Loader2, AlertCircle
+  ExternalLink, ChevronRight, Eye, Check, Loader2, AlertCircle,
+  FileText, Download
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { supabase } from '../lib/supabase';
 import { PortalHeader } from '../components/PortalHeader';
+import { downloadGradeReportPdf } from '../services/pdfService';
 import type { Grade, TeacherNote, Announcement } from '../types';
 
 export const StudentPortal: React.FC = () => {
@@ -15,6 +17,7 @@ export const StudentPortal: React.FC = () => {
   // Determine active tab from URL sub-path
   const getTabFromPath = () => {
     if (currentPath === '/portal/siswa/nilai') return 'nilai';
+    if (currentPath === '/portal/siswa/rekap') return 'rekap';
     if (currentPath === '/portal/siswa/keterangan') return 'keterangan';
     if (currentPath === '/portal/siswa/pengumuman') return 'pengumuman';
     if (currentPath === '/portal/siswa/perkembangan') return 'perkembangan';
@@ -40,6 +43,12 @@ export const StudentPortal: React.FC = () => {
 
   const [gradeError, setGradeError] = useState<string | null>(null);
   const [noteError, setNoteError] = useState<string | null>(null);
+
+  // Rekap Nilai States
+  const [selectedSemester, setSelectedSemester] = useState('1 (Ganjil)');
+  const [selectedAcademicYear, setSelectedAcademicYear] = useState('2025/2026');
+  const [downloadingPdf, setDownloadingPdf] = useState(false);
+  const [pdfMessage, setPdfMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
   // Modal Detail Nilai
   const [selectedGrade, setSelectedGrade] = useState<Grade | null>(null);
@@ -179,6 +188,46 @@ export const StudentPortal: React.FC = () => {
     gradesBySubject[sub].push(g);
   });
 
+  // Handler Unduh Dokumen Rekap Nilai PDF Resmi Sekolah
+  const handleDownloadReport = () => {
+    if (!studentData) {
+      setPdfMessage({ type: 'error', text: 'Profil siswa belum lengkap atau belum terdaftar.' });
+      return;
+    }
+
+    if (grades.length === 0) {
+      setPdfMessage({
+        type: 'error',
+        text: 'Data nilai semester ini belum diterbitkan oleh dewan guru. Rekapitulasi PDF hanya dapat diunduh jika telah ada nilai resmi.',
+      });
+      return;
+    }
+
+    try {
+      setDownloadingPdf(true);
+      setPdfMessage(null);
+      downloadGradeReportPdf({
+        student: studentData,
+        grades,
+        notes,
+        semester: selectedSemester,
+        academicYear: selectedAcademicYear,
+      });
+      setPdfMessage({
+        type: 'success',
+        text: `Dokumen rekap nilai resmi ananda ${studentData.name} berhasil diunduh dalam format PDF!`,
+      });
+      setTimeout(() => setPdfMessage(null), 5000);
+    } catch (err: any) {
+      setPdfMessage({
+        type: 'error',
+        text: err.message || 'Terjadi kendala saat menyusun berkas PDF.',
+      });
+    } finally {
+      setDownloadingPdf(false);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-[#f8fafc] text-slate-800 flex flex-col font-sans">
       <PortalHeader
@@ -215,7 +264,8 @@ export const StudentPortal: React.FC = () => {
             <nav className="space-y-1">
               {[
                 { id: 'beranda', label: 'Beranda', icon: <Home className="w-4 h-4" /> },
-                { id: 'nilai', label: 'Nilai Saya', icon: <Award className="w-4 h-4" />, count: grades.length },
+                { id: 'nilai', label: 'Daftar Nilai', icon: <Award className="w-4 h-4" />, count: grades.length },
+                { id: 'rekap', label: 'Rekap Nilai & PDF', icon: <FileText className="w-4 h-4" />, count: grades.length > 0 ? grades.length : undefined },
                 { id: 'keterangan', label: 'Catatan Guru', icon: <MessageSquare className="w-4 h-4" />, count: notes.filter(n => !n.read_at).length, alert: true },
                 { id: 'perkembangan', label: 'Perkembangan Belajar', icon: <TrendingUp className="w-4 h-4" /> },
                 { id: 'pengumuman', label: 'Pengumuman', icon: <Megaphone className="w-4 h-4" />, count: announcements.length },
@@ -317,7 +367,7 @@ export const StudentPortal: React.FC = () => {
               </div>
 
               {/* 4 Summary Cards */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                 {/* Card Nilai Terbaru */}
                 <div
                   onClick={() => handleTabChange('nilai')}
@@ -395,10 +445,35 @@ export const StudentPortal: React.FC = () => {
                   </div>
                 </div>
 
+                {/* Card Rekap Nilai PDF */}
+                <div
+                  onClick={() => handleTabChange('rekap')}
+                  className="bg-white rounded-3xl p-5 shadow-sm hover:shadow-lg transition-all cursor-pointer border border-emerald-200/80 flex flex-col justify-between group bg-gradient-to-br from-white via-emerald-50/20 to-teal-50/30"
+                >
+                  <div className="flex items-center justify-between mb-3">
+                    <div className="w-10 h-10 rounded-2xl bg-emerald-100 text-emerald-700 flex items-center justify-center font-bold">
+                      <FileText className="w-5 h-5" />
+                    </div>
+                    <span className="text-[11px] font-bold text-emerald-800 bg-emerald-100 px-2 py-0.5 rounded-full">
+                      Siap Unduh
+                    </span>
+                  </div>
+                  <div>
+                    <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider">REKAP NILAI PDF</h3>
+                    <p className="text-xs text-slate-600 mt-1 leading-relaxed">
+                      Lembar rekapitulasi nilai resmi sekolah lengkap dengan catatan guru & pengesahan tanda tangan.
+                    </p>
+                  </div>
+                  <div className="mt-3 pt-2 border-t border-slate-100 flex items-center justify-between text-xs text-emerald-700 font-bold">
+                    <span>Buka Rekap & Cetak</span>
+                    <ChevronRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
+                  </div>
+                </div>
+
                 {/* Card Perkembangan Belajar */}
                 <div
                   onClick={() => handleTabChange('perkembangan')}
-                  className="bg-white rounded-3xl p-5 shadow-sm hover:shadow-lg transition-all cursor-pointer border border-slate-200/80 flex flex-col justify-between group sm:col-span-2 lg:col-span-1"
+                  className="bg-white rounded-3xl p-5 shadow-sm hover:shadow-lg transition-all cursor-pointer border border-slate-200/80 flex flex-col justify-between group"
                 >
                   <div className="flex items-center justify-between mb-3">
                     <div className="w-10 h-10 rounded-2xl bg-amber-50 text-amber-600 flex items-center justify-center font-bold">
@@ -539,6 +614,244 @@ export const StudentPortal: React.FC = () => {
                   </>
                 )}
               </div>
+            </div>
+          )}
+
+          {/* ==================== 2.5 REKAP NILAI & UNDUH PDF ==================== */}
+          {activeTab === 'rekap' && (
+            <div className="space-y-6">
+              {/* Feedback Message */}
+              {pdfMessage && (
+                <div
+                  className={`p-4 rounded-2xl text-xs font-bold flex items-center gap-2.5 animate-in fade-in ${
+                    pdfMessage.type === 'error'
+                      ? 'bg-rose-50 border border-rose-200 text-rose-800'
+                      : 'bg-emerald-50 border border-emerald-200 text-emerald-800'
+                  }`}
+                >
+                  {pdfMessage.type === 'error' ? (
+                    <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
+                  ) : (
+                    <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                  )}
+                  <span>{pdfMessage.text}</span>
+                </div>
+              )}
+
+              {/* Download Action Banner */}
+              <div className="bg-gradient-to-r from-emerald-800 via-emerald-700 to-teal-800 rounded-3xl p-6 md:p-8 text-white shadow-xl relative overflow-hidden">
+                <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-6 relative z-10">
+                  <div className="space-y-2 max-w-2xl">
+                    <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-white/15 text-emerald-100 text-xs font-bold backdrop-blur-sm">
+                      <FileText className="w-3.5 h-3.5" />
+                      <span>DOKUMEN RESMI SEKOLAH</span>
+                    </div>
+                    <h2 className="text-2xl md:text-3xl font-black tracking-tight">
+                      Rekapitulasi Hasil Belajar Siswa
+                    </h2>
+                    <p className="text-xs md:text-sm text-emerald-100 leading-relaxed">
+                      Unduh lembar dokumen resmi hasil belajar ananda <strong className="text-white underline">{studentData?.name}</strong> (NIS: {studentData?.nis || '-'}), lengkap dengan rincian nilai per mata pelajaran, catatan pembinaan guru, serta kolom tanda tangan wali kelas dan orang tua.
+                    </p>
+
+                    {/* Filter Semester & Tahun Ajaran */}
+                    <div className="flex flex-wrap items-center gap-3 pt-2">
+                      <div className="flex items-center gap-1.5 text-xs bg-white/10 px-3 py-1.5 rounded-xl backdrop-blur-sm">
+                        <span className="text-emerald-200 font-bold">Semester:</span>
+                        <select
+                          value={selectedSemester}
+                          onChange={e => setSelectedSemester(e.target.value)}
+                          className="bg-transparent text-white font-bold focus:outline-none cursor-pointer"
+                        >
+                          <option value="1 (Ganjil)" className="text-slate-900">Semester 1 (Ganjil)</option>
+                          <option value="2 (Genap)" className="text-slate-900">Semester 2 (Genap)</option>
+                        </select>
+                      </div>
+
+                      <div className="flex items-center gap-1.5 text-xs bg-white/10 px-3 py-1.5 rounded-xl backdrop-blur-sm">
+                        <span className="text-emerald-200 font-bold">Tahun Ajaran:</span>
+                        <select
+                          value={selectedAcademicYear}
+                          onChange={e => setSelectedAcademicYear(e.target.value)}
+                          className="bg-transparent text-white font-bold focus:outline-none cursor-pointer"
+                        >
+                          <option value="2025/2026" className="text-slate-900">2025/2026</option>
+                          <option value="2024/2025" className="text-slate-900">2024/2025</option>
+                        </select>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Main Download Button */}
+                  <div className="shrink-0 w-full sm:w-auto">
+                    <button
+                      onClick={handleDownloadReport}
+                      disabled={downloadingPdf || grades.length === 0}
+                      className="w-full sm:w-auto px-7 py-4 rounded-2xl bg-white text-emerald-800 hover:bg-emerald-50 active:scale-95 font-black text-sm shadow-xl flex items-center justify-center gap-3 transition-all hover:scale-105 disabled:opacity-50 disabled:hover:scale-100 disabled:cursor-not-allowed group"
+                      title={grades.length === 0 ? 'Nilai resmi belum tersedia' : 'Unduh Rekap Nilai PDF Resmi'}
+                    >
+                      {downloadingPdf ? (
+                        <>
+                          <Loader2 className="w-5 h-5 animate-spin text-emerald-700" />
+                          <span>Menyusun Dokumen PDF...</span>
+                        </>
+                      ) : (
+                        <>
+                          <Download className="w-5 h-5 text-emerald-700 group-hover:-translate-y-0.5 transition-transform" />
+                          <span>Unduh Rekap Nilai PDF</span>
+                        </>
+                      )}
+                    </button>
+                    <p className="text-[11px] text-emerald-200 mt-2 text-center">
+                      {grades.length > 0 ? 'Format A4 Siap Cetak • Standar Resmi SDI SAIQ' : 'Nilai belum diterbitkan oleh guru'}
+                    </p>
+                  </div>
+                </div>
+
+                {/* Badges Summary */}
+                <div className="mt-6 pt-6 border-t border-white/15 grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
+                  <div className="bg-white/10 rounded-2xl p-3 backdrop-blur-sm">
+                    <div className="text-emerald-200 text-[10px] font-bold">MATA PELAJARAN</div>
+                    <div className="font-extrabold text-sm mt-0.5">{Object.keys(gradesBySubject).length} Terdata</div>
+                  </div>
+                  <div className="bg-white/10 rounded-2xl p-3 backdrop-blur-sm">
+                    <div className="text-emerald-200 text-[10px] font-bold">TOTAL PENILAIAN</div>
+                    <div className="font-extrabold text-sm mt-0.5">{grades.length} Terbit</div>
+                  </div>
+                  <div className="bg-white/10 rounded-2xl p-3 backdrop-blur-sm">
+                    <div className="text-emerald-200 text-[10px] font-bold">RATA-RATA AKHIR</div>
+                    <div className="font-extrabold text-base mt-0.5 font-mono">{averageScore > 0 ? averageScore : '-'}</div>
+                  </div>
+                  <div className="bg-white/10 rounded-2xl p-3 backdrop-blur-sm">
+                    <div className="text-emerald-200 text-[10px] font-bold">CATATAN GURU</div>
+                    <div className="font-extrabold text-sm mt-0.5">{notes.length} Evaluasi</div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Structured Recap Table */}
+              <div className="bg-white rounded-3xl p-6 shadow-sm border border-slate-200/80 space-y-4">
+                <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-3 pb-4 border-b border-slate-100">
+                  <div>
+                    <h3 className="text-lg font-extrabold text-slate-900 flex items-center gap-2">
+                      <Award className="w-5 h-5 text-emerald-600" />
+                      <span>Rincian Rekapitulasi Nilai Per Mata Pelajaran</span>
+                    </h3>
+                    <p className="text-xs text-slate-500 mt-0.5">
+                      Kompilasi nilai tugas, penilaian harian (UH), asesmen tengah semester (STS), dan asesmen akhir semester (SAS).
+                    </p>
+                  </div>
+                  <button
+                    onClick={handleDownloadReport}
+                    disabled={grades.length === 0}
+                    className="px-4 py-2 rounded-xl bg-emerald-50 hover:bg-emerald-100 text-emerald-800 text-xs font-bold flex items-center gap-1.5 self-start disabled:opacity-50"
+                  >
+                    <Download className="w-4 h-4 text-emerald-700" />
+                    <span>Unduh PDF</span>
+                  </button>
+                </div>
+
+                {grades.length === 0 ? (
+                  <div className="py-16 text-center text-slate-400 text-sm">
+                    <AlertCircle className="w-10 h-10 text-slate-300 mx-auto mb-2" />
+                    <p className="font-bold text-slate-600">Data Nilai Belum Tersedia</p>
+                    <p className="text-xs text-slate-400 mt-1 max-w-md mx-auto">
+                      Belum ada nilai yang dipublikasikan oleh dewan guru untuk semester ini. Nilai resmi akan tampil di sini setelah dewan guru menerbitkannya.
+                    </p>
+                  </div>
+                ) : (
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left text-xs">
+                      <thead>
+                        <tr className="bg-slate-50 text-slate-600 border-b border-slate-200 uppercase font-extrabold text-[11px]">
+                          <th className="py-3 px-4 rounded-l-xl">No</th>
+                          <th className="py-3 px-3">Mata Pelajaran</th>
+                          <th className="py-3 px-3">Komponen Penilaian Terbit</th>
+                          <th className="py-3 px-3 text-center">Rata-rata Skor</th>
+                          <th className="py-3 px-4 rounded-r-xl">Predikat & Capaian</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100">
+                        {Object.keys(gradesBySubject).map((subName, idx) => {
+                          const subGrades = gradesBySubject[subName];
+                          const subAvg = Math.round(
+                            subGrades.reduce((acc, curr) => acc + Number(curr.score), 0) / subGrades.length
+                          );
+                          const predikat =
+                            subAvg >= 90
+                              ? { label: 'Sangat Baik (A)', color: 'bg-emerald-100 text-emerald-800' }
+                              : subAvg >= 80
+                                ? { label: 'Baik (B)', color: 'bg-blue-100 text-blue-800' }
+                                : subAvg >= 70
+                                  ? { label: 'Cukup (C)', color: 'bg-amber-100 text-amber-800' }
+                                  : { label: 'Perlu Bimbingan (D)', color: 'bg-rose-100 text-rose-800' };
+
+                          return (
+                            <tr key={subName} className="hover:bg-emerald-50/30 transition-colors">
+                              <td className="py-3.5 px-4 font-bold text-slate-400">{idx + 1}</td>
+                              <td className="py-3.5 px-3">
+                                <span className="font-extrabold text-slate-900 block text-sm">{subName}</span>
+                                <span className="text-[11px] text-slate-400">Guru: {subGrades[0]?.teacher_name || '-'}</span>
+                              </td>
+                              <td className="py-3.5 px-3">
+                                <div className="flex flex-wrap gap-1.5">
+                                  {subGrades.map(sg => (
+                                    <span
+                                      key={sg.id}
+                                      className="px-2 py-0.5 rounded-lg bg-slate-100 text-slate-700 text-[10px] font-medium font-mono"
+                                      title={`${sg.assessment_type} (${sg.assessment_date}): ${sg.score}`}
+                                    >
+                                      {sg.assessment_type}: <strong className="text-slate-900">{sg.score}</strong>
+                                    </span>
+                                  ))}
+                                </div>
+                              </td>
+                              <td className="py-3.5 px-3 text-center">
+                                <span className="text-base font-black text-emerald-800 font-mono">
+                                  {subAvg}
+                                </span>
+                              </td>
+                              <td className="py-3.5 px-4">
+                                <span className={`inline-block px-2.5 py-1 rounded-xl text-[11px] font-bold ${predikat.color}`}>
+                                  {predikat.label}
+                                </span>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                      <tfoot>
+                        <tr className="bg-emerald-50/60 font-extrabold text-xs border-t-2 border-emerald-200">
+                          <td colSpan={3} className="py-3.5 px-4 text-emerald-900">
+                            RATA-RATA NILAI KESELURUHAN HASIL BELAJAR SISWA
+                          </td>
+                          <td className="py-3.5 px-3 text-center font-black text-emerald-800 font-mono text-base">
+                            {averageScore}
+                          </td>
+                          <td className="py-3.5 px-4 text-emerald-800">
+                            {averageScore >= 80 ? 'Tuntas Memuaskan' : 'Tuntas'}
+                          </td>
+                        </tr>
+                      </tfoot>
+                    </table>
+                  </div>
+                )}
+              </div>
+
+              {/* Catatan Pembinaan Guru */}
+              {notes.length > 0 && (
+                <div className="bg-white rounded-3xl p-6 shadow-sm border border-slate-200/80 space-y-3">
+                  <h4 className="font-extrabold text-sm text-slate-900 flex items-center gap-2">
+                    <MessageSquare className="w-4 h-4 text-blue-600" />
+                    <span>Catatan Bimbingan Guru yang Dilampirkan pada Rekap Nilai</span>
+                  </h4>
+                  <div className="p-4 rounded-2xl bg-blue-50/50 border border-blue-100 text-xs text-slate-700 leading-relaxed italic">
+                    "{notes[0].content}"
+                    <div className="mt-2 text-[11px] font-bold text-blue-900 not-italic">
+                      — {notes[0].teacher_name} ({notes[0].subject_name || 'Dewan Guru'})
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
           )}
 
@@ -845,8 +1158,8 @@ export const StudentPortal: React.FC = () => {
         {[
           { id: 'beranda', label: 'Beranda', icon: <Home className="w-5 h-5" /> },
           { id: 'nilai', label: 'Nilai', icon: <Award className="w-5 h-5" /> },
+          { id: 'rekap', label: 'Rekap PDF', icon: <FileText className="w-5 h-5" /> },
           { id: 'keterangan', label: 'Catatan', icon: <MessageSquare className="w-5 h-5" />, alert: notes.some(n => !n.read_at) },
-          { id: 'pengumuman', label: 'Pengumuman', icon: <Megaphone className="w-5 h-5" /> },
           { id: 'profil', label: 'Profil', icon: <User className="w-5 h-5" /> },
         ].map(item => (
           <button

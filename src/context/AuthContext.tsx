@@ -15,11 +15,13 @@ interface AuthContextType {
   currentPath: string;
   navigate: (path: string) => void;
   signIn: (email: string, password: string) => Promise<{ error: Error | null }>;
-  signOut: () => Promise<void>;
+  signOut: (redirectTo?: string) => Promise<void>;
   resetPassword: (email: string) => Promise<{ error: Error | null }>;
   refreshProfile: () => Promise<void>;
   externalExamUrl: string;
   openExternalExam: () => void;
+  isStudentActive: boolean;
+  studentAccountStatus: 'active' | 'inactive' | 'graduated' | null;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -27,13 +29,13 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const isConfigured = isSupabaseConfigured();
 
-  // Browser path management
+  // Browser path management (Mendukung /portal/* dan /login/*)
   const getInitialPath = (): string => {
     if (typeof window === 'undefined') return '/';
     const path = window.location.pathname;
-    if (path.startsWith('/portal')) return path;
+    if (path.startsWith('/portal') || path.startsWith('/login')) return path;
     const hash = window.location.hash.replace('#', '');
-    if (hash.startsWith('/portal')) return hash;
+    if (hash.startsWith('/portal') || hash.startsWith('/login')) return hash;
     return path || '/';
   };
 
@@ -63,11 +65,11 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   useEffect(() => {
     const handlePopState = () => {
       const p = window.location.pathname;
-      if (p.startsWith('/portal')) {
+      if (p.startsWith('/portal') || p.startsWith('/login')) {
         setCurrentPath(p);
       } else {
         const hash = window.location.hash.replace('#', '');
-        setCurrentPath(hash.startsWith('/portal') ? hash : p || '/');
+        setCurrentPath((hash.startsWith('/portal') || hash.startsWith('/login')) ? hash : p || '/');
       }
     };
 
@@ -110,8 +112,11 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           if (!stdError && std) {
             setStudentData({
               ...std,
+              email: authUser.email || undefined,
               className: (std as any).classes?.name || 'Kelas Belum Ditentukan',
             });
+          } else {
+            setStudentData(null);
           }
         }
 
@@ -125,6 +130,8 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
           if (!tchError && tch) {
             setTeacherData(tch as Teacher);
+          } else {
+            setTeacherData(null);
           }
         }
       }
@@ -198,7 +205,8 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     }
   };
 
-  const signOut = async () => {
+  const signOut = async (redirectTo?: string) => {
+    const currentRole = profile?.role;
     if (isConfigured) {
       await supabase.auth.signOut();
     }
@@ -207,7 +215,16 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     setProfile(null);
     setStudentData(null);
     setTeacherData(null);
-    navigate('/portal/login');
+
+    if (redirectTo) {
+      navigate(redirectTo);
+    } else if (currentRole === 'student') {
+      navigate('/login/siswa');
+    } else if (currentRole === 'admin') {
+      navigate('/login/admin');
+    } else {
+      navigate('/portal/login');
+    }
   };
 
   const resetPassword = async (email: string): Promise<{ error: Error | null }> => {
@@ -225,6 +242,9 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       await fetchUserData(user);
     }
   };
+
+  const isStudentActive = studentData ? studentData.status === 'active' : true;
+  const studentAccountStatus = studentData?.status || null;
 
   return (
     <AuthContext.Provider
@@ -245,6 +265,8 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         refreshProfile,
         externalExamUrl,
         openExternalExam,
+        isStudentActive,
+        studentAccountStatus,
       }}
     >
       {children}

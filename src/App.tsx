@@ -12,23 +12,42 @@ import { AdminPortal } from './pages/AdminPortal';
 const AppRouter: React.FC = () => {
   const { currentPath } = useAuth();
 
-  // Public Gateway & Login
-  if (currentPath === '/portal' || currentPath === '/portal/') {
-    return <PortalGateway />;
+  // 1. Dedicated & Public Logins
+  if (currentPath === '/login/admin' || currentPath.startsWith('/login/admin/')) {
+    return <LoginPage forcedType="admin" />;
   }
-  if (currentPath === '/portal/login') {
+  if (currentPath === '/login/siswa' || currentPath.startsWith('/login/siswa/')) {
+    return <LoginPage forcedType="student" />;
+  }
+  if (currentPath === '/portal/login' || currentPath === '/login' || currentPath === '/login/') {
     return <LoginPage />;
   }
 
-  // Protected Role-based Portals
+  // 2. Public Portal Gateway
+  if (currentPath === '/portal' || currentPath === '/portal/') {
+    return <PortalGateway />;
+  }
+
+  // 3. Portal Siswa (Eksklusif Hak Akses Siswa Terdaftar)
+  // Menjamin privasi data akademik: Tidak mencampur data siswa dengan siswa lain atau admin
   if (currentPath.startsWith('/portal/siswa')) {
     return (
-      <ProtectedRoute allowedRoles={['student', 'admin']}>
+      <ProtectedRoute allowedRoles={['student']}>
         <StudentPortal />
       </ProtectedRoute>
     );
   }
 
+  // 4. Portal Administrator (Eksklusif Hak Akses Admin Terverifikasi)
+  if (currentPath.startsWith('/portal/admin')) {
+    return (
+      <ProtectedRoute allowedRoles={['admin']}>
+        <AdminPortal />
+      </ProtectedRoute>
+    );
+  }
+
+  // 5. Portal Dewan Guru & Tenaga Pendidik
   if (currentPath.startsWith('/portal/guru')) {
     return (
       <ProtectedRoute allowedRoles={['teacher', 'admin']}>
@@ -37,18 +56,11 @@ const AppRouter: React.FC = () => {
     );
   }
 
+  // 6. Portal Wali Murid
   if (currentPath.startsWith('/portal/wali')) {
     return (
       <ProtectedRoute allowedRoles={['parent', 'admin']}>
         <ParentPortal />
-      </ProtectedRoute>
-    );
-  }
-
-  if (currentPath.startsWith('/portal/admin')) {
-    return (
-      <ProtectedRoute allowedRoles={['admin']}>
-        <AdminPortal />
       </ProtectedRoute>
     );
   }
