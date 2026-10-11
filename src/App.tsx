@@ -19,6 +19,9 @@ const AppRouter: React.FC = () => {
   if (currentPath === '/login/siswa' || currentPath.startsWith('/login/siswa/')) {
     return <LoginPage forcedType="student" />;
   }
+  if (currentPath === '/login/guru' || currentPath.startsWith('/login/guru/')) {
+    return <LoginPage forcedType="teacher" />;
+  }
   if (currentPath === '/portal/login' || currentPath === '/login' || currentPath === '/login/') {
     return <LoginPage />;
   }

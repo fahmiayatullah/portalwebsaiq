@@ -159,10 +159,12 @@ serve(async (req: Request) => {
     });
 
     if (createAuthError || !authCreated.user) {
+      const msg = createAuthError?.message || 'Gagal membuat akun auth siswa di Supabase.';
+      const friendlyMsg = msg.includes('already been registered')
+        ? `Alamat email "${email}" sudah terdaftar pada akun lain di sistem. Harap gunakan email lain.`
+        : msg;
       return new Response(
-        JSON.stringify({
-          error: createAuthError?.message || 'Gagal membuat akun auth siswa di Supabase.',
-        }),
+        JSON.stringify({ error: friendlyMsg }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }

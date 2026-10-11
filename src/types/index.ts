@@ -25,17 +25,31 @@ export interface Subject {
 
 export interface Teacher {
   id: string;
-  auth_user_id: string;
+  auth_user_id?: string | null;
   nip: string;
   name: string;
+  email?: string;
   title?: string | null;
   photo_url?: string | null;
+  status?: 'active' | 'inactive';
+  created_at?: string;
+}
+
+export interface TeacherAccountInfo {
+  id: string;
+  auth_user_id?: string | null;
+  nip: string;
+  name: string;
+  email?: string;
+  title?: string | null;
+  hasLinkedAuth: boolean;
+  status: 'active' | 'inactive';
   created_at?: string;
 }
 
 export interface Student {
   id: string;
-  auth_user_id: string;
+  auth_user_id?: string | null;
   nis: string;
   name: string;
   email?: string;
@@ -49,7 +63,7 @@ export interface Student {
 
 export interface StudentAccountInfo {
   id: string;
-  auth_user_id: string;
+  auth_user_id?: string | null;
   nis: string;
   name: string;
   email?: string;

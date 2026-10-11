@@ -2,21 +2,27 @@ import React, { useState, useEffect } from 'react';
 import {
   Lock, ArrowRight, ArrowLeft, School, Eye, EyeOff,
   AlertCircle, CheckCircle2, Loader2, HelpCircle,
-  ShieldCheck, GraduationCap
+  ShieldCheck, GraduationCap, UserCheck
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 
 interface LoginPageProps {
-  forcedType?: 'admin' | 'student';
+  forcedType?: 'admin' | 'student' | 'teacher';
 }
 
 export const LoginPage: React.FC<LoginPageProps> = ({ forcedType }) => {
   const { signIn, resetPassword, navigate, isConfigured, profile, user, currentPath } = useAuth();
 
   // Deteksi tipe login dari prop atau URL rute
-  const portalType: 'admin' | 'student' | 'general' =
+  const portalType: 'admin' | 'student' | 'teacher' | 'general' =
     forcedType ||
-    (currentPath.includes('/login/admin') ? 'admin' : currentPath.includes('/login/siswa') ? 'student' : 'general');
+    (currentPath.includes('/login/admin')
+      ? 'admin'
+      : currentPath.includes('/login/siswa')
+        ? 'student'
+        : currentPath.includes('/login/guru')
+          ? 'teacher'
+          : 'general');
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -41,7 +47,6 @@ export const LoginPage: React.FC<LoginPageProps> = ({ forcedType }) => {
         navigate('/portal/admin');
       } else if (portalType === 'student') {
         if (profile.role === 'admin') {
-          // Admin masuk lewat login siswa dialihkan ke Portal Admin
           navigate('/portal/admin');
           return;
         }
@@ -50,6 +55,16 @@ export const LoginPage: React.FC<LoginPageProps> = ({ forcedType }) => {
           return;
         }
         navigate('/portal/siswa');
+      } else if (portalType === 'teacher') {
+        if (profile.role === 'admin') {
+          navigate('/portal/admin');
+          return;
+        }
+        if (profile.role !== 'teacher') {
+          setErrorMessage('Akun ini bukan akun Dewan Guru terdaftar.');
+          return;
+        }
+        navigate('/portal/guru');
       } else {
         // Rute umum /portal/login
         if (profile.role === 'student') navigate('/portal/siswa');
@@ -108,6 +123,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({ forcedType }) => {
 
   const isAdminView = portalType === 'admin';
   const isStudentView = portalType === 'student';
+  const isTeacherView = portalType === 'teacher';
 
   const themeColors = isAdminView
     ? {
@@ -118,14 +134,23 @@ export const LoginPage: React.FC<LoginPageProps> = ({ forcedType }) => {
         ringFocus: 'focus:ring-purple-500',
         textAccent: 'text-purple-700',
       }
-    : {
-        bgGradient: 'from-emerald-800 via-emerald-700 to-teal-900',
-        cardBadgeBg: 'bg-emerald-100 text-emerald-800 border-emerald-200',
-        iconBg: 'from-emerald-600 to-teal-500',
-        btnBg: 'bg-emerald-600 hover:bg-emerald-700',
-        ringFocus: 'focus:ring-emerald-500',
-        textAccent: 'text-emerald-700',
-      };
+    : isTeacherView
+      ? {
+          bgGradient: 'from-blue-900 via-indigo-950 to-slate-900',
+          cardBadgeBg: 'bg-blue-100 text-blue-800 border-blue-200',
+          iconBg: 'from-blue-600 to-cyan-600',
+          btnBg: 'bg-blue-600 hover:bg-blue-700',
+          ringFocus: 'focus:ring-blue-500',
+          textAccent: 'text-blue-700',
+        }
+      : {
+          bgGradient: 'from-emerald-800 via-emerald-700 to-teal-900',
+          cardBadgeBg: 'bg-emerald-100 text-emerald-800 border-emerald-200',
+          iconBg: 'from-emerald-600 to-teal-500',
+          btnBg: 'bg-emerald-600 hover:bg-emerald-700',
+          ringFocus: 'focus:ring-emerald-500',
+          textAccent: 'text-emerald-700',
+        };
 
   return (
     <div className={`min-h-screen bg-gradient-to-br ${themeColors.bgGradient} flex flex-col justify-center items-center p-4 relative font-sans`}>
@@ -149,14 +174,23 @@ export const LoginPage: React.FC<LoginPageProps> = ({ forcedType }) => {
           {/* Logo & School Header */}
           <div className="text-center mb-6">
             <div className={`w-14 h-14 bg-gradient-to-tr ${themeColors.iconBg} rounded-2xl flex items-center justify-center text-white mx-auto shadow-lg mb-3`}>
-              {isAdminView ? <ShieldCheck className="w-7 h-7" /> : isStudentView ? <GraduationCap className="w-7 h-7" /> : <School className="w-7 h-7" />}
+              {isAdminView ? (
+                <ShieldCheck className="w-7 h-7" />
+              ) : isStudentView ? (
+                <GraduationCap className="w-7 h-7" />
+              ) : isTeacherView ? (
+                <UserCheck className="w-7 h-7" />
+              ) : (
+                <School className="w-7 h-7" />
+              )}
             </div>
             <h1 className="text-2xl font-black text-slate-900 tracking-tight">SDI SAIQ AL-HIKMAH</h1>
             
             <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold mt-2 border ${themeColors.cardBadgeBg}">
               {isAdminView && <span>Portal Khusus Administrator Sekolah</span>}
               {isStudentView && <span>Ruang Informasi Akademik Pribadi Siswa</span>}
-              {!isAdminView && !isStudentView && <span>Portal Informasi Akademik Terpadu</span>}
+              {isTeacherView && <span>Ruang Penilaian & Bimbingan Dewan Guru</span>}
+              {!isAdminView && !isStudentView && !isTeacherView && <span>Portal Informasi Akademik Terpadu</span>}
             </div>
           </div>
 

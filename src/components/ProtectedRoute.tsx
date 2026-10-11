@@ -10,7 +10,7 @@ interface ProtectedRouteProps {
 }
 
 export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children, allowedRoles }) => {
-  const { user, profile, loading, navigate, isConfigured, studentData, signOut } = useAuth();
+  const { user, profile, loading, navigate, isConfigured, studentData, teacherData, signOut } = useAuth();
 
   // 1. Loading State
   if (loading) {
@@ -146,6 +146,57 @@ export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children, allowe
             </p>
             <button
               onClick={() => signOut('/login/siswa')}
+              className="w-full py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs transition-colors"
+            >
+              Keluar dari Sistem
+            </button>
+          </div>
+        </div>
+      );
+    }
+  }
+
+  // 5.B Khusus Guru: Validasi Profil Pendidik & Status Akun (1 Guru = 1 Akun Aktif)
+  if (currentRole === 'teacher') {
+    if (!teacherData) {
+      return (
+        <div className="min-h-screen bg-[#f8fafc] flex flex-col items-center justify-center p-4">
+          <div className="max-w-md w-full bg-white rounded-3xl p-6 sm:p-8 shadow-xl border border-amber-200 text-center">
+            <div className="w-14 h-14 bg-amber-100 text-amber-700 rounded-2xl flex items-center justify-center mx-auto mb-4">
+              <ShieldAlert className="w-7 h-7" />
+            </div>
+            <h2 className="text-xl font-extrabold text-slate-900 mb-2">Profil Guru Belum Ditautkan</h2>
+            <p className="text-xs text-slate-600 leading-relaxed mb-6">
+              Akun autentikasi Anda (<span className="font-semibold text-slate-800">{user.email}</span>) telah terdaftar, namun belum memiliki profil guru yang tertaut di basis data sekolah.
+              <br /><br />
+              Silakan hubungi Administrator SDI SAIQ AL-HIKMAH untuk mengaitkan akun Anda dengan NIP dan identitas guru yang sah.
+            </p>
+            <button
+              onClick={() => signOut('/login/guru')}
+              className="w-full py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs transition-colors"
+            >
+              Keluar & Ganti Akun
+            </button>
+          </div>
+        </div>
+      );
+    }
+
+    if (teacherData.status === 'inactive') {
+      return (
+        <div className="min-h-screen bg-[#f8fafc] flex flex-col items-center justify-center p-4">
+          <div className="max-w-md w-full bg-white rounded-3xl p-6 sm:p-8 shadow-xl border border-rose-200 text-center">
+            <div className="w-14 h-14 bg-rose-100 text-rose-700 rounded-2xl flex items-center justify-center mx-auto mb-4">
+              <ShieldAlert className="w-7 h-7" />
+            </div>
+            <h2 className="text-xl font-extrabold text-slate-900 mb-2">Akun Guru Dinonaktifkan</h2>
+            <p className="text-xs text-slate-600 leading-relaxed mb-6">
+              Status akun guru <strong className="text-slate-800">{teacherData.name}</strong> (NIP: {teacherData.nip}) saat ini berstatus <strong>NONAKTIF</strong>.
+              <br /><br />
+              Akses ke Portal Guru dibatasi. Silakan hubungi bagian administrasi sekolah untuk mengaktifkan kembali akun Anda.
+            </p>
+            <button
+              onClick={() => signOut('/login/guru')}
               className="w-full py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs transition-colors"
             >
               Keluar dari Sistem

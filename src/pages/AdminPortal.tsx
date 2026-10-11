@@ -23,6 +23,7 @@ export type AdminTab =
   | 'dashboard'
   | 'siswa'
   | 'akun'
+  | 'akun-guru'
   | 'nilai'
   | 'guru'
   | 'kelas'
@@ -32,12 +33,13 @@ export type AdminTab =
   | 'profil-sekolah';
 
 export const AdminPortal: React.FC = () => {
-  const { externalExamUrl, navigate, currentPath, user } = useAuth();
+  const { externalExamUrl, navigate, currentPath } = useAuth();
 
   // URL Route Synchronization for Admin Portal
   const getTabFromPath = (): AdminTab => {
     if (currentPath === '/portal/admin/siswa') return 'siswa';
     if (currentPath === '/portal/admin/akun') return 'akun';
+    if (currentPath === '/portal/admin/akun-guru') return 'akun-guru';
     if (currentPath === '/portal/admin/nilai') return 'nilai';
     if (currentPath === '/portal/admin/guru') return 'guru';
     if (currentPath === '/portal/admin/kelas') return 'kelas';
@@ -77,6 +79,10 @@ export const AdminPortal: React.FC = () => {
   const [accountSearch, setAccountSearch] = useState('');
   const [accountStatusFilter, setAccountStatusFilter] = useState('all');
 
+  // Teacher Account States
+  const [teacherAccountSearch, setTeacherAccountSearch] = useState('');
+  const [teacherAccountStatusFilter, setTeacherAccountStatusFilter] = useState('all');
+
   const [gradeSearch, setGradeSearch] = useState('');
   const [gradeSubjectFilter, setGradeSubjectFilter] = useState('all');
   const [gradeClassFilter, setGradeClassFilter] = useState('all');
@@ -90,6 +96,14 @@ export const AdminPortal: React.FC = () => {
   const [accountEmail, setAccountEmail] = useState<string>('');
   const [accountPassword, setAccountPassword] = useState<string>('');
   const [showAccountPassword, setShowAccountPassword] = useState<boolean>(false);
+
+  // Teacher Account Modal State
+  const [showCreateTeacherAccountModal, setShowCreateTeacherAccountModal] = useState(false);
+  const [teacherAccountMode, setTeacherAccountMode] = useState<'existing' | 'new'>('existing');
+  const [selectedTeacherId, setSelectedTeacherId] = useState<string>('');
+  const [teacherAccountEmail, setTeacherAccountEmail] = useState<string>('');
+  const [teacherAccountPassword, setTeacherAccountPassword] = useState<string>('');
+  const [showTeacherAccountPassword, setShowTeacherAccountPassword] = useState<boolean>(false);
 
   const [showAddTeacher, setShowAddTeacher] = useState(false);
   const [showAddClass, setShowAddClass] = useState(false);
@@ -427,7 +441,7 @@ export const AdminPortal: React.FC = () => {
     }
   };
 
-  // 2. TAMBAH GURU
+  // 2. TAMBAH GURU (Data Master Pendidik)
   const handleAddTeacherSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newTeacher.name || !newTeacher.nip) {
@@ -442,19 +456,176 @@ export const AdminPortal: React.FC = () => {
         nip: newTeacher.nip.trim(),
         title: newTeacher.title.trim() || 'Tenaga Pendidik',
         photo_url: newTeacher.photo_url.trim() || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&q=80&w=256',
-        auth_user_id: user?.id || '00000000-0000-0000-0000-000000000000',
+        auth_user_id: null,
+        status: 'active',
       });
 
       if (error) {
         showNotification('error', `Gagal menambahkan guru: ${error.message}`);
       } else {
-        showNotification('success', `Guru ${newTeacher.name} berhasil ditambahkan!`);
+        showNotification('success', `Guru ${newTeacher.name} berhasil ditambahkan! Anda dapat membuat akun login di tab Akun Guru.`);
         setShowAddTeacher(false);
         setNewTeacher({ name: '', nip: '', title: '', photo_url: '' });
         loadAllData();
       }
     } catch {
       showNotification('error', 'Kendala saat menambahkan guru.');
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  // 2.A-1 PILIH GURU UNTUK PEMBUATAN AKUN (Sistem 1 Guru 1 Akun)
+  const handleSelectTeacherForAccount = (teacherId: string) => {
+    setSelectedTeacherId(teacherId);
+    const chosen = teachers.find(t => t.id === teacherId);
+    if (chosen) {
+      const safeName = chosen.name.toLowerCase().replace(/[^a-z0-9]/g, '');
+      const cleanNip = chosen.nip ? chosen.nip.replace(/[^0-9]/g, '') : '';
+      const suggestedEmail = chosen.email || `${safeName}${cleanNip ? `.${cleanNip}` : ''}@guru.saiq.sch.id`;
+      setTeacherAccountEmail(suggestedEmail);
+    } else {
+      setTeacherAccountEmail('');
+    }
+  };
+
+  const openCreateAccountForTeacher = (t: Teacher) => {
+    setSelectedTeacherId(t.id);
+    const safeName = t.name.toLowerCase().replace(/[^a-z0-9]/g, '');
+    const cleanNip = t.nip ? t.nip.replace(/[^0-9]/g, '') : '';
+    setTeacherAccountEmail(t.email || `${safeName}${cleanNip ? `.${cleanNip}` : ''}@guru.saiq.sch.id`);
+    setTeacherAccountPassword('');
+    setTeacherAccountMode('existing');
+    setShowCreateTeacherAccountModal(true);
+  };
+
+  const handleCreateTeacherAccountSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+
+    if (!teacherAccountEmail || !teacherAccountPassword) {
+      showNotification('error', 'Email dan kata sandi awal guru wajib diisi.');
+      return;
+    }
+
+    if (teacherAccountPassword.length < 6) {
+      showNotification('error', 'Kata sandi minimal harus 6 karakter.');
+      return;
+    }
+
+    const payload: any = {
+      email: teacherAccountEmail.trim(),
+      password: teacherAccountPassword,
+    };
+
+    if (teacherAccountMode === 'existing') {
+      if (!selectedTeacherId) {
+        showNotification('error', 'Silakan pilih dewan guru yang akan dibuatkan akun.');
+        return;
+      }
+      const chosen = teachers.find(t => t.id === selectedTeacherId);
+      if (chosen?.auth_user_id) {
+        showNotification(
+          'error',
+          `Guru "${chosen.name}" sudah memiliki akun aktif. Sistem menolak pembuatan akun kedua demi mencegah duplikasi akun.`
+        );
+        return;
+      }
+      payload.teacher_id = selectedTeacherId;
+    } else {
+      if (!newTeacher.name || !newTeacher.nip) {
+        showNotification('error', 'Nama dan NIP guru wajib diisi.');
+        return;
+      }
+      payload.name = newTeacher.name.trim();
+      payload.nip = newTeacher.nip.trim();
+      payload.title = newTeacher.title.trim() || 'Tenaga Pendidik';
+      payload.photo_url = newTeacher.photo_url.trim() || undefined;
+    }
+
+    setActionLoading(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('create-teacher', {
+        body: payload,
+      });
+
+      if (error || data?.error) {
+        const errorMsg = data?.error || error?.message || 'Layanan pembuatan akun auth guru belum merespons.';
+        showNotification('error', `Gagal membuat akun guru: ${errorMsg}`);
+      } else {
+        showNotification(
+          'success',
+          data?.message || 'Akun dewan guru berhasil dibuat dan ditautkan dengan aman ke Supabase Auth!'
+        );
+        setShowCreateTeacherAccountModal(false);
+        setSelectedTeacherId('');
+        setTeacherAccountEmail('');
+        setTeacherAccountPassword('');
+        setNewTeacher({ name: '', nip: '', title: '', photo_url: '' });
+        await loadAllData();
+      }
+    } catch {
+      showNotification('error', 'Terjadi kesalahan jaringan saat membuat akun guru.');
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  // 2.B TOGGLE STATUS AKUN GURU (Aktif <-> Nonaktif)
+  const handleToggleTeacherStatus = async (teacherId: string, currentStatus: string | undefined, teacherName: string) => {
+    const nextStatus = currentStatus === 'inactive' ? 'active' : 'inactive';
+    const actionText = nextStatus === 'inactive' ? 'MENONAKTIFKAN' : 'MENGAKTIFKAN KEMBALI';
+
+    if (!window.confirm(`Yakin ingin ${actionText} akses portal dewan guru ${teacherName}? ${nextStatus === 'inactive' ? 'Guru tidak akan dapat login atau menginput nilai.' : 'Guru akan dapat kembali mengakses portal dewan guru.'}`)) {
+      return;
+    }
+
+    setActionLoading(true);
+    try {
+      const { error } = await supabase
+        .from('teachers')
+        .update({ status: nextStatus })
+        .eq('id', teacherId);
+
+      if (error) {
+        showNotification('error', `Gagal mengubah status akses guru: ${error.message}`);
+      } else {
+        showNotification(
+          'success',
+          `Status akses ${teacherName} berhasil diubah menjadi ${nextStatus === 'active' ? 'AKTIF' : 'NONAKTIF'}.`
+        );
+        loadAllData();
+      }
+    } catch {
+      showNotification('error', 'Kendala saat memperbarui status akun guru.');
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  // 2.C RESET KATA SANDI GURU
+  const handleResetTeacherPassword = async (email: string | undefined, teacherName: string) => {
+    if (!email) {
+      showNotification('error', `Email login untuk ${teacherName} belum tercatat.`);
+      return;
+    }
+
+    if (!window.confirm(`Kirim tautan reset kata sandi akun pendidik ke email: ${email}?`)) {
+      return;
+    }
+
+    setActionLoading(true);
+    try {
+      const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), {
+        redirectTo: `${window.location.origin}/portal/reset-password`,
+      });
+
+      if (error) {
+        showNotification('error', `Gagal mengirim tautan reset: ${error.message}`);
+      } else {
+        showNotification('success', `Tautan reset sandi guru telah dikirim ke ${email}.`);
+      }
+    } catch {
+      showNotification('error', 'Kendala saat mengirim email reset sandi guru.');
     } finally {
       setActionLoading(false);
     }
@@ -670,7 +841,27 @@ export const AdminPortal: React.FC = () => {
       s.name.toLowerCase().includes(accountSearch.toLowerCase()) ||
       s.nis.toLowerCase().includes(accountSearch.toLowerCase()) ||
       (s.email && s.email.toLowerCase().includes(accountSearch.toLowerCase()));
-    const matchStatus = accountStatusFilter === 'all' || s.status === accountStatusFilter;
+    let matchStatus = true;
+    if (accountStatusFilter === 'active') matchStatus = s.status === 'active' && !!s.auth_user_id;
+    else if (accountStatusFilter === 'inactive') matchStatus = s.status === 'inactive' && !!s.auth_user_id;
+    else if (accountStatusFilter === 'unlinked') matchStatus = !s.auth_user_id;
+    return matchSearch && matchStatus;
+  });
+
+  const filteredTeacherAccounts = teachers.filter(t => {
+    const matchSearch = teacherAccountSearch === '' ||
+      t.name.toLowerCase().includes(teacherAccountSearch.toLowerCase()) ||
+      (t.nip && t.nip.toLowerCase().includes(teacherAccountSearch.toLowerCase())) ||
+      (t.email && t.email.toLowerCase().includes(teacherAccountSearch.toLowerCase())) ||
+      (t.title && t.title.toLowerCase().includes(teacherAccountSearch.toLowerCase()));
+    let matchStatus = true;
+    if (teacherAccountStatusFilter === 'active') {
+      matchStatus = (t.status || 'active') === 'active' && !!t.auth_user_id;
+    } else if (teacherAccountStatusFilter === 'inactive') {
+      matchStatus = t.status === 'inactive' && !!t.auth_user_id;
+    } else if (teacherAccountStatusFilter === 'unlinked') {
+      matchStatus = !t.auth_user_id;
+    }
     return matchSearch && matchStatus;
   });
 
@@ -721,6 +912,7 @@ export const AdminPortal: React.FC = () => {
           { id: 'dashboard' as const, label: 'Dashboard' },
           { id: 'siswa' as const, label: 'Siswa' },
           { id: 'akun' as const, label: 'Akun Siswa' },
+          { id: 'akun-guru' as const, label: 'Akun Guru' },
           { id: 'nilai' as const, label: 'Nilai' },
           { id: 'guru' as const, label: 'Guru' },
           { id: 'kelas' as const, label: 'Kelas' },
@@ -761,6 +953,7 @@ export const AdminPortal: React.FC = () => {
                 { id: 'dashboard' as const, label: 'Dashboard Utama', icon: <Activity className="w-4 h-4" /> },
                 { id: 'siswa' as const, label: 'Kelola Siswa', icon: <Users className="w-4 h-4" />, count: students.length },
                 { id: 'akun' as const, label: 'Akun Login Siswa', icon: <KeyRound className="w-4 h-4" />, count: students.filter(s => s.auth_user_id).length },
+                { id: 'akun-guru' as const, label: 'Akun Login Guru', icon: <UserPlus className="w-4 h-4" />, count: teachers.filter(t => t.auth_user_id).length },
                 { id: 'nilai' as const, label: 'Pengawasan Nilai', icon: <FileSpreadsheet className="w-4 h-4" />, count: grades.length },
                 { id: 'guru' as const, label: 'Kelola Guru', icon: <UserCheck className="w-4 h-4" />, count: teachers.length },
                 { id: 'kelas' as const, label: 'Kelas & Rombel', icon: <Layers className="w-4 h-4" />, count: classes.length },
@@ -817,7 +1010,7 @@ export const AdminPortal: React.FC = () => {
                   Pengawasan menyeluruh data siswa, akun guru, artikel berita halaman depan, dan aktivitas penerbitan nilai resmi.
                 </p>
 
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-6 pt-6 border-t border-white/20 text-xs">
+                <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 mt-6 pt-6 border-t border-white/20 text-xs">
                   <div className="bg-white/10 rounded-2xl p-3.5 backdrop-blur-sm cursor-pointer hover:bg-white/20 transition-all" onClick={() => handleTabChange('siswa')}>
                     <div className="text-purple-200 text-[10px] font-bold">TOTAL SISWA</div>
                     <div className="text-2xl font-black mt-0.5">{students.length}</div>
@@ -830,6 +1023,10 @@ export const AdminPortal: React.FC = () => {
                     <div className="text-purple-200 text-[10px] font-bold">TOTAL GURU</div>
                     <div className="text-2xl font-black mt-0.5">{teachers.length}</div>
                   </div>
+                  <div className="bg-white/10 rounded-2xl p-3.5 backdrop-blur-sm cursor-pointer hover:bg-white/20 transition-all" onClick={() => handleTabChange('akun-guru')}>
+                    <div className="text-purple-200 text-[10px] font-bold">AKUN GURU</div>
+                    <div className="text-2xl font-black mt-0.5">{teachers.filter(t => t.auth_user_id).length}</div>
+                  </div>
                   <div className="bg-white/10 rounded-2xl p-3.5 backdrop-blur-sm cursor-pointer hover:bg-white/20 transition-all" onClick={() => handleTabChange('nilai')}>
                     <div className="text-purple-200 text-[10px] font-bold">NILAI TERCATAT</div>
                     <div className="text-2xl font-black mt-0.5">{grades.length}</div>
@@ -838,7 +1035,7 @@ export const AdminPortal: React.FC = () => {
               </div>
 
               {/* Quick Actions Card */}
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                 <button
                   onClick={() => setShowAddArticle(true)}
                   className="bg-white p-5 rounded-3xl border border-slate-200/80 shadow-sm hover:shadow-md transition-all text-left group"
@@ -863,6 +1060,19 @@ export const AdminPortal: React.FC = () => {
                     Kelola Akun Siswa
                   </h3>
                   <p className="text-xs text-slate-500 mt-0.5">Sistem 1 Siswa 1 Akun & kelola hak akses</p>
+                </button>
+
+                <button
+                  onClick={() => handleTabChange('akun-guru')}
+                  className="bg-white p-5 rounded-3xl border border-slate-200/80 shadow-sm hover:shadow-md transition-all text-left group"
+                >
+                  <div className="w-10 h-10 rounded-2xl bg-teal-50 text-teal-600 flex items-center justify-center font-bold mb-2">
+                    <UserPlus className="w-5 h-5" />
+                  </div>
+                  <h3 className="font-extrabold text-sm text-slate-900 group-hover:text-teal-700 transition-colors">
+                    Kelola Akun Guru
+                  </h3>
+                  <p className="text-xs text-slate-500 mt-0.5">Sistem 1 Guru 1 Akun & hak akses portal pendidik</p>
                 </button>
 
                 <button
@@ -1147,15 +1357,21 @@ export const AdminPortal: React.FC = () => {
               </div>
 
               {/* Account Metrics */}
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+              <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
                 <div className="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-sm">
-                  <div className="text-[11px] font-bold text-slate-400 uppercase">Total Siswa Terdaftar</div>
+                  <div className="text-[11px] font-bold text-slate-400 uppercase">Total Siswa</div>
                   <div className="text-2xl font-black text-slate-900 mt-1">{students.length}</div>
                 </div>
                 <div className="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-sm">
-                  <div className="text-[11px] font-bold text-purple-600 uppercase">Terkoneksi Auth UID</div>
+                  <div className="text-[11px] font-bold text-purple-600 uppercase">Terkoneksi UID</div>
                   <div className="text-2xl font-black text-purple-700 mt-1">
                     {students.filter(s => !!s.auth_user_id).length}
+                  </div>
+                </div>
+                <div className="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-sm">
+                  <div className="text-[11px] font-bold text-amber-600 uppercase">Belum Ada Akun</div>
+                  <div className="text-2xl font-black text-amber-600 mt-1">
+                    {students.filter(s => !s.auth_user_id).length}
                   </div>
                 </div>
                 <div className="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-sm">
@@ -1165,7 +1381,7 @@ export const AdminPortal: React.FC = () => {
                   </div>
                 </div>
                 <div className="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-sm">
-                  <div className="text-[11px] font-bold text-rose-500 uppercase">Akun Dinonaktifkan</div>
+                  <div className="text-[11px] font-bold text-rose-500 uppercase">Dinonaktifkan</div>
                   <div className="text-2xl font-black text-rose-600 mt-1">
                     {students.filter(s => s.status === 'inactive' && !!s.auth_user_id).length}
                   </div>
@@ -1219,9 +1435,10 @@ export const AdminPortal: React.FC = () => {
                       onChange={e => setAccountStatusFilter(e.target.value)}
                       className="px-3 py-2 rounded-xl border border-slate-200 bg-white text-xs font-semibold text-slate-700 focus:outline-none"
                     >
-                      <option value="all">Semua Status Akun</option>
+                      <option value="all">Semua Siswa & Akun</option>
                       <option value="active">Hanya Akun Aktif</option>
                       <option value="inactive">Hanya Akun Nonaktif</option>
+                      <option value="unlinked">Belum Memiliki Akun</option>
                     </select>
 
                     {(accountSearch || accountStatusFilter !== 'all') && (
@@ -1304,7 +1521,7 @@ export const AdminPortal: React.FC = () => {
                                   )}
                                 </td>
                                 <td className="py-3 px-3 text-center">
-                                  <div className="flex items-center justify-center gap-2">
+                                  <div className="flex items-center justify-center gap-1.5 flex-wrap">
                                     {!s.auth_user_id ? (
                                       <button
                                         onClick={() => openCreateAccountForStudent(s)}
@@ -1316,10 +1533,13 @@ export const AdminPortal: React.FC = () => {
                                       </button>
                                     ) : (
                                       <>
+                                        <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-purple-50 text-purple-700 border border-purple-200" title="Akun Auth terhubung dengan siswa ini">
+                                          Sudah memiliki akun
+                                        </span>
                                         <button
                                           onClick={() => handleToggleStudentStatus(s.id, s.status, s.name)}
                                           disabled={actionLoading}
-                                          className={`px-3 py-1.5 rounded-xl font-bold text-[11px] transition-all flex items-center gap-1 ${
+                                          className={`px-2.5 py-1 rounded-xl font-bold text-[11px] transition-all flex items-center gap-1 ${
                                             s.status === 'active'
                                               ? 'bg-rose-50 text-rose-700 hover:bg-rose-100 border border-rose-200'
                                               : 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200'
@@ -1342,11 +1562,276 @@ export const AdminPortal: React.FC = () => {
                                         <button
                                           onClick={() => handleResetStudentPassword(studentEmail, s.name)}
                                           disabled={actionLoading}
-                                          className="px-2.5 py-1.5 rounded-xl bg-slate-100 text-slate-700 hover:bg-slate-200 font-bold text-[11px] transition-all flex items-center gap-1 border border-slate-200"
+                                          className="px-2 py-1 rounded-xl bg-slate-100 text-slate-700 hover:bg-slate-200 font-bold text-[11px] transition-all flex items-center gap-1 border border-slate-200"
                                           title="Kirim email instruksi reset kata sandi"
                                         >
                                           <KeyRound className="w-3 h-3 text-slate-500" />
                                           <span>Reset Sandi</span>
+                                        </button>
+                                      </>
+                                    )}
+                                  </div>
+                                </td>
+                              </tr>
+                            );
+                          })
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* ==================== 2.C KELOLA AKUN GURU (SISTEM 1 GURU 1 AKUN) ==================== */}
+          {activeTab === 'akun-guru' && (
+            <div className="space-y-4">
+              {/* Security Policy Information Banner */}
+              <div className="bg-gradient-to-r from-emerald-800 via-teal-800 to-indigo-900 rounded-3xl p-6 text-white shadow-lg space-y-2">
+                <div className="flex items-center gap-2 text-emerald-200 font-bold text-xs uppercase tracking-wider">
+                  <Lock className="w-4 h-4 text-emerald-300" />
+                  <span>Sistem Keamanan 1 Guru 1 Akun Autentikasi (Database Level)</span>
+                </div>
+                <h2 className="text-xl md:text-2xl font-black">
+                  Manajemen Kredensial & Hak Akses Portal Dewan Guru
+                </h2>
+                <p className="text-xs text-emerald-100 max-w-3xl leading-relaxed">
+                  Setiap ustadz/ustadzah dihubungkan secara eksklusif ke 1 akun autentikasi dengan role <strong>teacher</strong> melalui foreign key <code className="bg-emerald-950/60 px-1.5 py-0.5 rounded font-mono text-emerald-200">teachers.auth_user_id</code>.
+                  Guru hanya dapat mengelola nilai santri dan tidak dapat mengakses kewenangan administrator sekolah. Guru yang dinonaktifkan diblokir otomatis dari sistem.
+                </p>
+              </div>
+
+              {/* Teacher Account Metrics */}
+              <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
+                <div className="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-sm">
+                  <div className="text-[11px] font-bold text-slate-400 uppercase">Total Guru Pendidik</div>
+                  <div className="text-2xl font-black text-slate-900 mt-1">{teachers.length}</div>
+                </div>
+                <div className="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-sm">
+                  <div className="text-[11px] font-bold text-purple-600 uppercase">Terkoneksi Auth UID</div>
+                  <div className="text-2xl font-black text-purple-700 mt-1">
+                    {teachers.filter(t => !!t.auth_user_id).length}
+                  </div>
+                </div>
+                <div className="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-sm">
+                  <div className="text-[11px] font-bold text-amber-600 uppercase">Belum Memiliki Akun</div>
+                  <div className="text-2xl font-black text-amber-600 mt-1">
+                    {teachers.filter(t => !t.auth_user_id).length}
+                  </div>
+                </div>
+                <div className="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-sm">
+                  <div className="text-[11px] font-bold text-emerald-600 uppercase">Akun Aktif</div>
+                  <div className="text-2xl font-black text-emerald-700 mt-1">
+                    {teachers.filter(t => (t.status || 'active') === 'active' && !!t.auth_user_id).length}
+                  </div>
+                </div>
+                <div className="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-sm">
+                  <div className="text-[11px] font-bold text-rose-500 uppercase">Akun Nonaktif</div>
+                  <div className="text-2xl font-black text-rose-600 mt-1">
+                    {teachers.filter(t => t.status === 'inactive' && !!t.auth_user_id).length}
+                  </div>
+                </div>
+              </div>
+
+              {/* Accounts Table Container */}
+              <div className="bg-white rounded-3xl p-6 shadow-sm border border-slate-200/80 space-y-4">
+                <div className="flex flex-wrap justify-between items-center gap-3 pb-4 border-b border-slate-100">
+                  <div>
+                    <h3 className="text-base font-extrabold text-slate-900 flex items-center gap-2">
+                      <UserCheck className="w-5 h-5 text-emerald-600" />
+                      <span>Daftar Akun Autentikasi Dewan Guru</span>
+                    </h3>
+                    <p className="text-xs text-slate-500 mt-0.5">
+                      Kelola hak akses portal input nilai guru, status aktifasi, dan reset kata sandi ustadz/ustadzah.
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => {
+                      setSelectedTeacherId('');
+                      setTeacherAccountEmail('');
+                      setTeacherAccountPassword('');
+                      setTeacherAccountMode('existing');
+                      setShowCreateTeacherAccountModal(true);
+                    }}
+                    className="px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs flex items-center gap-1.5 shadow-md transition-all"
+                  >
+                    <Plus className="w-4 h-4" />
+                    <span>Buat Akun Guru Baru</span>
+                  </button>
+                </div>
+
+                {/* Filter and Search Bar for Teachers */}
+                <div className="flex flex-wrap items-center gap-3 bg-slate-50 p-3.5 rounded-2xl border border-slate-200/80 text-xs">
+                  <div className="relative flex-1 min-w-[220px]">
+                    <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                    <input
+                      type="text"
+                      value={teacherAccountSearch}
+                      onChange={e => setTeacherAccountSearch(e.target.value)}
+                      placeholder="Cari berdasarkan nama guru, NIP, email, atau bidang studi..."
+                      className="w-full pl-9 pr-3 py-2 rounded-xl border border-slate-200 bg-white text-xs text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
+                    />
+                  </div>
+
+                  <div className="flex items-center gap-2 shrink-0">
+                    <Filter className="w-3.5 h-3.5 text-slate-400" />
+                    <select
+                      value={teacherAccountStatusFilter}
+                      onChange={e => setTeacherAccountStatusFilter(e.target.value)}
+                      className="px-3 py-2 rounded-xl border border-slate-200 bg-white text-xs font-semibold text-slate-700 focus:outline-none"
+                    >
+                      <option value="all">Semua Status Guru</option>
+                      <option value="active">Hanya Akun Aktif</option>
+                      <option value="inactive">Hanya Akun Nonaktif</option>
+                      <option value="unlinked">Belum Memiliki Akun</option>
+                    </select>
+
+                    {(teacherAccountSearch || teacherAccountStatusFilter !== 'all') && (
+                      <button
+                        onClick={() => {
+                          setTeacherAccountSearch('');
+                          setTeacherAccountStatusFilter('all');
+                        }}
+                        className="px-2.5 py-2 text-xs font-bold text-slate-500 hover:text-slate-800 underline"
+                      >
+                        Reset
+                      </button>
+                    )}
+                  </div>
+                </div>
+
+                {loading ? (
+                  <div className="py-16 text-center text-xs text-slate-400 flex flex-col items-center justify-center">
+                    <Loader2 className="w-8 h-8 animate-spin text-emerald-600 mb-2" />
+                    <span>Memuat daftar akun dewan guru...</span>
+                  </div>
+                ) : (
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left text-xs">
+                      <thead>
+                        <tr className="bg-slate-50 text-slate-600 border-b border-slate-200 uppercase font-extrabold text-[11px]">
+                          <th className="py-3 px-4 rounded-l-xl">Identitas Dewan Guru</th>
+                          <th className="py-3 px-3">Email Login</th>
+                          <th className="py-3 px-3">Role Sistem</th>
+                          <th className="py-3 px-3">Supabase Auth ID (UID)</th>
+                          <th className="py-3 px-3">Status Izin Akses</th>
+                          <th className="py-3 px-3 rounded-r-xl text-center">Tindakan Kelola</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100">
+                        {filteredTeacherAccounts.length === 0 ? (
+                          <tr>
+                            <td colSpan={6} className="py-8 text-center text-slate-400">
+                              Tidak ada akun dewan guru yang sesuai dengan kriteria pencarian.
+                            </td>
+                          </tr>
+                        ) : (
+                          filteredTeacherAccounts.map(t => {
+                            const safeName = t.name.toLowerCase().replace(/[^a-z0-9]/g, '');
+                            const cleanNip = t.nip ? t.nip.replace(/[^0-9]/g, '') : '';
+                            const teacherEmail = t.email || `${safeName}${cleanNip ? `.${cleanNip}` : ''}@guru.saiq.sch.id`;
+                            const isActive = (t.status || 'active') === 'active';
+
+                            return (
+                              <tr key={t.id} className="hover:bg-emerald-50/30 transition-colors">
+                                <td className="py-3 px-4">
+                                  <div className="flex items-center gap-3">
+                                    <img
+                                      src={t.photo_url || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&q=80&w=256'}
+                                      alt={t.name}
+                                      className="w-10 h-10 rounded-2xl object-cover border border-emerald-300 shrink-0"
+                                    />
+                                    <div>
+                                      <div className="font-bold text-slate-900">{t.name}</div>
+                                      <div className="text-[11px] text-emerald-800 font-mono font-bold">NIP: {t.nip}</div>
+                                      <div className="text-[10px] text-slate-500">{t.title}</div>
+                                    </div>
+                                  </div>
+                                </td>
+                                <td className="py-3 px-3 font-mono text-slate-700">
+                                  <div className="flex items-center gap-1.5">
+                                    <Mail className="w-3.5 h-3.5 text-slate-400" />
+                                    <span>{teacherEmail}</span>
+                                  </div>
+                                </td>
+                                <td className="py-3 px-3">
+                                  <span className="inline-block bg-teal-50 text-teal-700 border border-teal-200 text-[10px] font-bold px-2 py-0.5 rounded-full uppercase">
+                                    Teacher / Guru
+                                  </span>
+                                </td>
+                                <td className="py-3 px-3 font-mono text-[11px]">
+                                  {t.auth_user_id ? (
+                                    <span className="bg-slate-100 text-slate-600 px-2 py-0.5 rounded border border-slate-200" title={t.auth_user_id}>
+                                      {t.auth_user_id.slice(0, 13)}...
+                                    </span>
+                                  ) : (
+                                    <span className="text-amber-600 italic">Belum dibuatkan UID</span>
+                                  )}
+                                </td>
+                                <td className="py-3 px-3">
+                                  {!t.auth_user_id ? (
+                                    <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-extrabold uppercase bg-slate-100 text-slate-600 border border-slate-200">
+                                      <AlertCircle className="w-3 h-3 text-amber-500" />
+                                      <span>Belum Ada Akun</span>
+                                    </span>
+                                  ) : (
+                                    <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-extrabold uppercase ${
+                                      isActive
+                                        ? 'bg-emerald-100 text-emerald-800 border border-emerald-200'
+                                        : 'bg-rose-100 text-rose-800 border border-rose-200'
+                                    }`}>
+                                      {isActive ? 'Aktif (Diberi Akses)' : 'Nonaktif (Diblokir)'}
+                                    </span>
+                                  )}
+                                </td>
+                                <td className="py-3 px-3 text-center">
+                                  <div className="flex items-center justify-center gap-1.5 flex-wrap">
+                                    {!t.auth_user_id ? (
+                                      <button
+                                        onClick={() => openCreateAccountForTeacher(t)}
+                                        className="px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-[11px] transition-all flex items-center gap-1 shadow-sm"
+                                        title="Buat Akun Auth untuk guru ini"
+                                      >
+                                        <UserPlus className="w-3.5 h-3.5" />
+                                        <span>Buat Akun Guru</span>
+                                      </button>
+                                    ) : (
+                                      <>
+                                        <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-teal-50 text-teal-700 border border-teal-200" title="Akun Auth terhubung dengan ustadz/ustadzah ini">
+                                          Sudah memiliki akun
+                                        </span>
+                                        <button
+                                          onClick={() => handleToggleTeacherStatus(t.id, t.status, t.name)}
+                                          disabled={actionLoading}
+                                          className={`px-2.5 py-1 rounded-xl font-bold text-[11px] transition-all flex items-center gap-1 ${
+                                            isActive
+                                              ? 'bg-rose-50 text-rose-700 hover:bg-rose-100 border border-rose-200'
+                                              : 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200'
+                                          }`}
+                                          title={isActive ? 'Nonaktifkan akses portal guru ini' : 'Aktifkan kembali akses guru ini'}
+                                        >
+                                          {isActive ? (
+                                            <>
+                                              <ToggleLeft className="w-3.5 h-3.5" />
+                                              <span>Nonaktifkan</span>
+                                            </>
+                                          ) : (
+                                            <>
+                                              <ToggleRight className="w-3.5 h-3.5" />
+                                              <span>Aktifkan</span>
+                                            </>
+                                          )}
+                                        </button>
+
+                                        <button
+                                          onClick={() => handleResetTeacherPassword(teacherEmail, t.name)}
+                                          disabled={actionLoading}
+                                          className="px-2 py-1 rounded-xl bg-slate-100 text-slate-700 hover:bg-slate-200 font-bold text-[11px] transition-all flex items-center gap-1 border border-slate-200"
+                                          title="Kirim email instruksi reset kata sandi"
+                                        >
+                                          <KeyRound className="w-3 h-3 text-slate-500" />
+                                          <span>Reset</span>
                                         </button>
                                       </>
                                     )}
@@ -2091,6 +2576,233 @@ export const AdminPortal: React.FC = () => {
                 >
                   {actionLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <KeyRound className="w-4 h-4" />}
                   <span>Buat & Tautkan Akun</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal Pembuatan Akun Guru Resmi (1 Guru = 1 Akun Auth) */}
+      {showCreateTeacherAccountModal && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl max-w-lg w-full p-6 shadow-2xl border border-slate-100 animate-in fade-in zoom-in-95 max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100 mb-4">
+              <div className="flex items-center gap-2.5">
+                <div className="w-10 h-10 rounded-2xl bg-emerald-100 text-emerald-700 flex items-center justify-center">
+                  <UserCheck className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-base font-extrabold text-slate-900">Buat Akun Autentikasi Guru</h3>
+                  <p className="text-[11px] text-emerald-700 font-semibold">
+                    Prinsip: 1 Guru = 1 Akun Supabase Auth (teachers.auth_user_id)
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowCreateTeacherAccountModal(false)}
+                className="w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-500 font-bold flex items-center justify-center text-sm"
+              >
+                &times;
+              </button>
+            </div>
+
+            {/* Mode Selector */}
+            <div className="flex bg-slate-100 p-1 rounded-2xl mb-4 text-xs font-bold">
+              <button
+                type="button"
+                onClick={() => setTeacherAccountMode('existing')}
+                className={`flex-1 py-2 rounded-xl transition-all ${
+                  teacherAccountMode === 'existing'
+                    ? 'bg-white text-emerald-900 shadow-sm'
+                    : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                Pilih Guru Terdaftar (Rekomendasi)
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setTeacherAccountMode('new');
+                  setSelectedTeacherId('');
+                  setTeacherAccountEmail('');
+                }}
+                className={`flex-1 py-2 rounded-xl transition-all ${
+                  teacherAccountMode === 'new'
+                    ? 'bg-white text-emerald-900 shadow-sm'
+                    : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                Daftar Guru Baru Sekaligus
+              </button>
+            </div>
+
+            <form onSubmit={handleCreateTeacherAccountSubmit} className="space-y-3.5 text-xs">
+              {teacherAccountMode === 'existing' ? (
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">
+                    Pilih Guru yang Belum Memiliki Akun <span className="text-rose-500">*</span>
+                  </label>
+                  <select
+                    required
+                    value={selectedTeacherId}
+                    onChange={e => handleSelectTeacherForAccount(e.target.value)}
+                    className="w-full px-3 py-2.5 rounded-xl border border-slate-200 bg-white font-medium text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
+                  >
+                    <option value="">-- Pilih Guru --</option>
+                    <optgroup label="Guru Belum Memiliki Akun">
+                      {teachers.filter(t => !t.auth_user_id).map(t => (
+                        <option key={t.id} value={t.id}>
+                          {t.name} (NIP: {t.nip}) - {t.title}
+                        </option>
+                      ))}
+                    </optgroup>
+                    <optgroup label="Guru Sudah Memiliki Akun (Dilarang Akun Kedua)">
+                      {teachers.filter(t => !!t.auth_user_id).map(t => (
+                        <option key={t.id} value={t.id} disabled>
+                          {t.name} (NIP: {t.nip}) - [SUDAH TERKONEKSI UID]
+                        </option>
+                      ))}
+                    </optgroup>
+                  </select>
+
+                  {/* Warning jika terpilih guru yang sudah punya akun */}
+                  {selectedTeacherId && teachers.find(t => t.id === selectedTeacherId)?.auth_user_id && (
+                    <div className="mt-2 p-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-800 text-[11px] flex items-center gap-2">
+                      <AlertCircle className="w-4 h-4 shrink-0 text-rose-600" />
+                      <span>Guru ini sudah memiliki akun aktif. Sistem menolak pembuatan akun kedua.</span>
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  <div>
+                    <label className="block font-bold text-slate-700 mb-1">
+                      Nama Lengkap Guru & Gelar <span className="text-rose-500">*</span>
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      value={newTeacher.name}
+                      onChange={e => {
+                        const val = e.target.value;
+                        setNewTeacher(prev => ({ ...prev, name: val }));
+                        if (val && newTeacher.nip) {
+                          const safe = val.toLowerCase().replace(/[^a-z0-9]/g, '');
+                          const cleanNip = newTeacher.nip.replace(/[^0-9]/g, '');
+                          setTeacherAccountEmail(`${safe}.${cleanNip}@guru.saiq.sch.id`);
+                        }
+                      }}
+                      className="w-full px-3 py-2.5 rounded-xl border border-slate-200 text-xs text-slate-800"
+                      placeholder="Contoh: Ust. Hamdan, S.Pd.I"
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block font-bold text-slate-700 mb-1">
+                        Nomor Induk Pegawai (NIP) <span className="text-rose-500">*</span>
+                      </label>
+                      <input
+                        type="text"
+                        required
+                        value={newTeacher.nip}
+                        onChange={e => {
+                          const val = e.target.value;
+                          setNewTeacher(prev => ({ ...prev, nip: val }));
+                          if (newTeacher.name && val) {
+                            const safe = newTeacher.name.toLowerCase().replace(/[^a-z0-9]/g, '');
+                            const cleanNip = val.replace(/[^0-9]/g, '');
+                            setTeacherAccountEmail(`${safe}.${cleanNip}@guru.saiq.sch.id`);
+                          }
+                        }}
+                        className="w-full px-3 py-2.5 rounded-xl border border-slate-200 text-xs font-mono text-slate-800"
+                        placeholder="Contoh: 198904122015021004"
+                      />
+                    </div>
+                    <div>
+                      <label className="block font-bold text-slate-700 mb-1">Jabatan / Bidang Studi</label>
+                      <input
+                        type="text"
+                        value={newTeacher.title}
+                        onChange={e => setNewTeacher(prev => ({ ...prev, title: e.target.value }))}
+                        className="w-full px-3 py-2.5 rounded-xl border border-slate-200 text-xs text-slate-800"
+                        placeholder="Contoh: Guru Tahfidz"
+                      />
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              <div>
+                <label className="block font-bold text-slate-700 mb-1">
+                  Alamat Email Login Guru <span className="text-rose-500">*</span>
+                </label>
+                <div className="relative">
+                  <Mail className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                  <input
+                    type="email"
+                    required
+                    value={teacherAccountEmail}
+                    onChange={e => setTeacherAccountEmail(e.target.value)}
+                    className="w-full pl-9 pr-3 py-2.5 rounded-xl border border-slate-200 text-xs font-mono text-slate-800"
+                    placeholder="nama.nip@guru.saiq.sch.id"
+                  />
+                </div>
+                <p className="text-[10px] text-slate-400 mt-1">
+                  Format email resmi dewan guru untuk autentikasi Supabase.
+                </p>
+              </div>
+
+              <div>
+                <label className="block font-bold text-slate-700 mb-1">
+                  Kata Sandi Awal Guru <span className="text-rose-500">*</span>
+                </label>
+                <div className="relative">
+                  <input
+                    type={showTeacherAccountPassword ? 'text' : 'password'}
+                    required
+                    minLength={6}
+                    value={teacherAccountPassword}
+                    onChange={e => setTeacherAccountPassword(e.target.value)}
+                    className="w-full pl-3 pr-10 py-2.5 rounded-xl border border-slate-200 text-xs font-mono text-slate-800"
+                    placeholder="Minimal 6 karakter"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowTeacherAccountPassword(!showTeacherAccountPassword)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                  >
+                    {showTeacherAccountPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </button>
+                </div>
+                <p className="text-[10px] text-slate-400 mt-1">
+                  Password dienkripsi langsung oleh Supabase Auth dan tidak disimpan dalam bentuk plaintext.
+                </p>
+              </div>
+
+              {/* Information Callout */}
+              <div className="p-3 rounded-2xl bg-emerald-50 border border-emerald-100 text-emerald-900 text-[11px] leading-relaxed">
+                <strong>Prinsip Satu Guru Satu Akun:</strong> Akun ini akan mendapatkan UUID eksklusif di <code className="font-mono bg-emerald-100 px-1 rounded">auth.users</code> dengan role <code className="font-mono bg-emerald-100 px-1 rounded">teacher</code> dan ditautkan ke kolom <code className="font-mono bg-emerald-100 px-1 rounded">teachers.auth_user_id</code>. Guru dapat login di <code className="font-mono bg-emerald-100 px-1 rounded">/login/guru</code>.
+              </div>
+
+              <div className="pt-3 flex gap-2 justify-end">
+                <button
+                  type="button"
+                  onClick={() => setShowCreateTeacherAccountModal(false)}
+                  disabled={actionLoading}
+                  className="px-4 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs transition-colors"
+                >
+                  Batal
+                </button>
+                <button
+                  type="submit"
+                  disabled={actionLoading || (teacherAccountMode === 'existing' && (!selectedTeacherId || !!teachers.find(t => t.id === selectedTeacherId)?.auth_user_id))}
+                  className="px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white font-bold text-xs flex items-center gap-1.5 shadow-md transition-all"
+                >
+                  {actionLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <UserPlus className="w-4 h-4" />}
+                  <span>Buat & Tautkan Akun Guru</span>
                 </button>
               </div>
             </form>
