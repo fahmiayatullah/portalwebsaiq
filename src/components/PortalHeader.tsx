@@ -13,6 +13,7 @@ interface PortalHeaderProps {
 
 export const PortalHeader: React.FC<PortalHeaderProps> = ({ title, subtitle, activeRole }) => {
   const {
+    user,
     profile,
     studentData,
     teacherData,
@@ -27,7 +28,7 @@ export const PortalHeader: React.FC<PortalHeaderProps> = ({ title, subtitle, act
     admin: { label: 'Admin', color: 'bg-purple-100 text-purple-800 border-purple-200', icon: <ShieldCheck className="w-3.5 h-3.5" /> },
   };
 
-  const displayName = profile?.full_name || studentData?.name || teacherData?.name || 'Pengguna';
+  const displayName = profile?.full_name || studentData?.name || teacherData?.name || 'Siswa SAIQ';
   const displayIdentifier = studentData?.nis ? `NIS: ${studentData.nis}` : teacherData?.nip ? `NIP: ${teacherData.nip}` : profile?.role;
   const avatarUrl = studentData?.photo_url || teacherData?.photo_url || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&q=80&w=256';
 
@@ -65,30 +66,39 @@ export const PortalHeader: React.FC<PortalHeaderProps> = ({ title, subtitle, act
           </div>
         </div>
 
-        {/* Right: Authenticated User Info & Logout */}
+        {/* Right: Authenticated User Info or Login CTA */}
         <div className="flex items-center gap-3">
-          <div className="flex items-center gap-2 pl-2">
-            <img
-              src={avatarUrl}
-              alt={displayName}
-              className="w-8 h-8 rounded-full object-cover border-2 border-emerald-500 shadow-sm"
-            />
-            <div className="hidden sm:block text-left">
-              <div className="text-xs font-extrabold text-slate-800 leading-tight truncate max-w-[140px]">
-                {displayName}
+          {user ? (
+            <div className="flex items-center gap-2 pl-2">
+              <img
+                src={avatarUrl}
+                alt={displayName}
+                className="w-8 h-8 rounded-full object-cover border-2 border-emerald-500 shadow-sm"
+              />
+              <div className="hidden sm:block text-left">
+                <div className="text-xs font-extrabold text-slate-800 leading-tight truncate max-w-[140px]">
+                  {displayName}
+                </div>
+                <div className="text-[10px] text-slate-400 font-semibold truncate max-w-[140px]">
+                  {displayIdentifier}
+                </div>
               </div>
-              <div className="text-[10px] text-slate-400 font-semibold truncate max-w-[140px]">
-                {displayIdentifier}
-              </div>
+              <button
+                onClick={() => signOut()}
+                className="p-2 rounded-xl text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-colors ml-1"
+                title="Keluar / Sign Out"
+              >
+                <LogOut className="w-4 h-4" />
+              </button>
             </div>
+          ) : (
             <button
-              onClick={() => signOut()}
-              className="p-2 rounded-xl text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-colors ml-1"
-              title="Keluar / Sign Out"
+              onClick={() => navigate(activeRole === 'student' ? '/login/siswa' : '/login/admin')}
+              className="px-4 py-2 rounded-xl text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 shadow-sm transition-all"
             >
-              <LogOut className="w-4 h-4" />
+              Masuk Akun {activeRole === 'student' ? 'Siswa' : 'Admin'}
             </button>
-          </div>
+          )}
         </div>
       </div>
     </header>

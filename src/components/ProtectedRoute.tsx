@@ -2,6 +2,7 @@ import React, { type ReactNode } from 'react';
 import { useAuth } from '../context/AuthContext';
 import type { UserRole } from '../types';
 import { ShieldAlert, ArrowLeft, Loader2 } from 'lucide-react';
+import { LoginPage } from '../pages/LoginPage';
 
 interface ProtectedRouteProps {
   children: ReactNode;
@@ -45,39 +46,11 @@ export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children, allowe
     );
   }
 
-  // 3. Unauthenticated -> Redirect to Dedicated Login
+  // 3. Unauthenticated -> Langsung tampilkan form login tanpa halaman perantara (Autentikasi Diperlukan dihapus)
   if (!user) {
     const isOnlyAdmin = allowedRoles.length === 1 && allowedRoles[0] === 'admin';
     const isOnlyStudent = allowedRoles.length === 1 && allowedRoles[0] === 'student';
-    const targetLogin = isOnlyAdmin ? '/login/admin' : isOnlyStudent ? '/login/siswa' : '/portal/login';
-
-    return (
-      <div className="min-h-screen bg-[#f8fafc] flex flex-col items-center justify-center p-4">
-        <div className="max-w-md w-full bg-white rounded-3xl p-6 sm:p-8 shadow-xl border border-slate-200 text-center">
-          <div className="w-14 h-14 bg-rose-100 text-rose-700 rounded-2xl flex items-center justify-center mx-auto mb-4">
-            <ShieldAlert className="w-7 h-7" />
-          </div>
-          <h2 className="text-xl font-extrabold text-slate-900 mb-2">Autentikasi Diperlukan</h2>
-          <p className="text-xs text-slate-600 leading-relaxed mb-6">
-            Anda harus masuk menggunakan akun {isOnlyAdmin ? 'Administrator' : isOnlyStudent ? 'Siswa' : 'resmi'} yang terdaftar untuk mengakses ruang portal ini.
-          </p>
-          <div className="space-y-2">
-            <button
-              onClick={() => navigate(targetLogin)}
-              className="w-full py-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs shadow-md transition-all"
-            >
-              Masuk ke Halaman Login {isOnlyAdmin ? 'Admin' : isOnlyStudent ? 'Siswa' : ''}
-            </button>
-            <button
-              onClick={() => navigate('/')}
-              className="w-full py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs transition-colors"
-            >
-              Kembali ke Beranda
-            </button>
-          </div>
-        </div>
-      </div>
-    );
+    return <LoginPage forcedType={isOnlyAdmin ? 'admin' : isOnlyStudent ? 'student' : undefined} />;
   }
 
   // 4. Role Authorization Check (Berdasarkan profil database terverifikasi)

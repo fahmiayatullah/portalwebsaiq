@@ -28,14 +28,9 @@ const AppRouter: React.FC = () => {
     return <PortalGateway />;
   }
 
-  // 3. Portal Siswa (Eksklusif Hak Akses Siswa Terdaftar)
-  // Menjamin privasi data akademik: Tidak mencampur data siswa dengan siswa lain atau admin
+  // 3. Portal Siswa (Langsung masuk ke Portal Siswa tanpa hambatan)
   if (currentPath.startsWith('/portal/siswa')) {
-    return (
-      <ProtectedRoute allowedRoles={['student']}>
-        <StudentPortal />
-      </ProtectedRoute>
-    );
+    return <StudentPortal />;
   }
 
   // 4. Portal Administrator (Eksklusif Hak Akses Admin Terverifikasi)

@@ -12,7 +12,7 @@ import { downloadGradeReportPdf } from '../services/pdfService';
 import type { Grade, TeacherNote, Announcement } from '../types';
 
 export const StudentPortal: React.FC = () => {
-  const { studentData, currentPath, navigate, openExternalExam } = useAuth();
+  const { studentData, currentPath, navigate, openExternalExam, user } = useAuth();
 
   // Determine active tab from URL sub-path
   const getTabFromPath = () => {
@@ -366,6 +366,32 @@ export const StudentPortal: React.FC = () => {
                 </div>
               </div>
 
+              {/* Unauthenticated Visitor Guidance Banner */}
+              {!user && (
+                <div className="bg-gradient-to-r from-amber-50 to-orange-50 border border-amber-200/80 rounded-3xl p-5 shadow-sm flex flex-col sm:flex-row items-center justify-between gap-4">
+                  <div className="flex items-center gap-3.5">
+                    <div className="w-12 h-12 rounded-2xl bg-amber-100 text-amber-700 flex items-center justify-center shrink-0 shadow-inner">
+                      <User className="w-6 h-6" />
+                    </div>
+                    <div>
+                      <h4 className="text-sm font-extrabold text-slate-900">
+                        Ruang Portal Akademik Siswa SDI SAIQ AL-HIKMAH
+                      </h4>
+                      <p className="text-xs text-slate-600 mt-0.5 leading-relaxed">
+                        Anda sedang membuka ruang portal siswa. Silakan masuk menggunakan akun siswa resmi untuk melihat transkrip nilai, catatan pembinaan guru, dan mengunduh berkas raport rekap PDF.
+                      </p>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => navigate('/login/siswa')}
+                    className="w-full sm:w-auto px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold shrink-0 shadow-md transition-all flex items-center justify-center gap-1.5"
+                  >
+                    <span>Masuk ke Akun Siswa</span>
+                    <ChevronRight className="w-4 h-4" />
+                  </button>
+                </div>
+              )}
+
               {/* 4 Summary Cards */}
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                 {/* Card Nilai Terbaru */}
@@ -529,7 +555,19 @@ export const StudentPortal: React.FC = () => {
                   </div>
                 ) : grades.length === 0 ? (
                   <div className="text-center py-16 text-slate-400 text-sm">
-                    Tidak ada nilai yang telah dipublikasikan.
+                    {user ? (
+                      'Belum ada data nilai yang dipublikasikan untuk akun Anda.'
+                    ) : (
+                      <div className="max-w-md mx-auto space-y-3">
+                        <p className="text-slate-600 font-medium">Anda belum masuk dengan akun siswa terdaftar.</p>
+                        <button
+                          onClick={() => navigate('/login/siswa')}
+                          className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-bold text-xs shadow-md transition-all"
+                        >
+                          Masuk ke Akun Siswa
+                        </button>
+                      </div>
+                    )}
                   </div>
                 ) : (
                   <>
@@ -650,7 +688,7 @@ export const StudentPortal: React.FC = () => {
                       Rekapitulasi Hasil Belajar Siswa
                     </h2>
                     <p className="text-xs md:text-sm text-emerald-100 leading-relaxed">
-                      Unduh lembar dokumen resmi hasil belajar ananda <strong className="text-white underline">{studentData?.name}</strong> (NIS: {studentData?.nis || '-'}), lengkap dengan rincian nilai per mata pelajaran, catatan pembinaan guru, serta kolom tanda tangan wali kelas dan orang tua.
+                      Unduh lembar dokumen resmi hasil belajar ananda <strong className="text-white underline">{studentData?.name || 'Siswa SDI SAIQ'}</strong> (NIS: {studentData?.nis || '-'}), lengkap dengan rincian nilai per mata pelajaran, catatan pembinaan guru, serta kolom tanda tangan wali kelas dan orang tua.
                     </p>
 
                     {/* Filter Semester & Tahun Ajaran */}
@@ -684,15 +722,20 @@ export const StudentPortal: React.FC = () => {
                   {/* Main Download Button */}
                   <div className="shrink-0 w-full sm:w-auto">
                     <button
-                      onClick={handleDownloadReport}
-                      disabled={downloadingPdf || grades.length === 0}
+                      onClick={user ? handleDownloadReport : () => navigate('/login/siswa')}
+                      disabled={downloadingPdf || (!!user && grades.length === 0)}
                       className="w-full sm:w-auto px-7 py-4 rounded-2xl bg-white text-emerald-800 hover:bg-emerald-50 active:scale-95 font-black text-sm shadow-xl flex items-center justify-center gap-3 transition-all hover:scale-105 disabled:opacity-50 disabled:hover:scale-100 disabled:cursor-not-allowed group"
-                      title={grades.length === 0 ? 'Nilai resmi belum tersedia' : 'Unduh Rekap Nilai PDF Resmi'}
+                      title={!user ? 'Masuk ke akun siswa' : grades.length === 0 ? 'Nilai resmi belum tersedia' : 'Unduh Rekap Nilai PDF Resmi'}
                     >
                       {downloadingPdf ? (
                         <>
                           <Loader2 className="w-5 h-5 animate-spin text-emerald-700" />
                           <span>Menyusun Dokumen PDF...</span>
+                        </>
+                      ) : !user ? (
+                        <>
+                          <User className="w-5 h-5 text-emerald-700" />
+                          <span>Masuk Akun untuk Unduh</span>
                         </>
                       ) : (
                         <>
@@ -702,7 +745,7 @@ export const StudentPortal: React.FC = () => {
                       )}
                     </button>
                     <p className="text-[11px] text-emerald-200 mt-2 text-center">
-                      {grades.length > 0 ? 'Format A4 Siap Cetak • Standar Resmi SDI SAIQ' : 'Nilai belum diterbitkan oleh guru'}
+                      {!user ? 'Masuk dengan akun siswa untuk membuka berkas PDF' : grades.length > 0 ? 'Format A4 Siap Cetak • Standar Resmi SDI SAIQ' : 'Nilai belum diterbitkan oleh guru'}
                     </p>
                   </div>
                 </div>
@@ -881,7 +924,19 @@ export const StudentPortal: React.FC = () => {
                     </div>
                   ) : notes.length === 0 ? (
                     <div className="text-center py-16 text-slate-400 text-sm">
-                      Belum ada catatan atau keterangan yang dipublikasikan oleh guru.
+                      {user ? (
+                        'Belum ada catatan atau keterangan yang dipublikasikan oleh guru untuk akun Anda.'
+                      ) : (
+                        <div className="max-w-md mx-auto space-y-3">
+                          <p className="text-slate-600 font-medium">Anda belum masuk dengan akun siswa terdaftar.</p>
+                          <button
+                            onClick={() => navigate('/login/siswa')}
+                            className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-bold text-xs shadow-md transition-all"
+                          >
+                            Masuk ke Akun Siswa
+                          </button>
+                        </div>
+                      )}
                     </div>
                   ) : (
                     notes.map(note => {
@@ -1078,40 +1133,52 @@ export const StudentPortal: React.FC = () => {
                   </h2>
                 </div>
 
-                <div className="mt-6 flex flex-col sm:flex-row items-center sm:items-start gap-6">
-                  <img
-                    src={studentData?.photo_url || 'https://images.unsplash.com/photo-1544717305-2782549b5136?auto=format&fit=crop&q=80&w=256'}
-                    alt={studentData?.name}
-                    className="w-28 h-28 rounded-3xl object-cover border-4 border-emerald-500 shadow-lg"
-                  />
-                  <div className="space-y-3 flex-1 text-center sm:text-left">
-                    <div>
-                      <h3 className="text-xl font-extrabold text-slate-900">{studentData?.name}</h3>
-                      <p className="text-xs text-emerald-700 font-bold">Status: {studentData?.status || 'Aktif'}</p>
-                    </div>
+                {!studentData ? (
+                  <div className="text-center py-16 text-slate-500 text-xs max-w-md mx-auto space-y-3">
+                    <p className="font-medium text-slate-700">Profil siswa belum dimuat atau Anda belum masuk dengan akun siswa resmi.</p>
+                    <button
+                      onClick={() => navigate('/login/siswa')}
+                      className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-bold text-xs shadow-md transition-all"
+                    >
+                      Masuk ke Akun Siswa
+                    </button>
+                  </div>
+                ) : (
+                  <div className="mt-6 flex flex-col sm:flex-row items-center sm:items-start gap-6">
+                    <img
+                      src={studentData?.photo_url || 'https://images.unsplash.com/photo-1544717305-2782549b5136?auto=format&fit=crop&q=80&w=256'}
+                      alt={studentData?.name}
+                      className="w-28 h-28 rounded-3xl object-cover border-4 border-emerald-500 shadow-lg"
+                    />
+                    <div className="space-y-3 flex-1 text-center sm:text-left">
+                      <div>
+                        <h3 className="text-xl font-extrabold text-slate-900">{studentData?.name}</h3>
+                        <p className="text-xs text-emerald-700 font-bold">Status: {studentData?.status || 'Aktif'}</p>
+                      </div>
 
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs pt-2">
-                      <div className="bg-slate-50 p-3 rounded-xl border border-slate-200">
-                        <span className="text-slate-400 block text-[10px]">Nomor Induk Siswa (NIS)</span>
-                        <strong className="text-slate-800 text-sm font-mono">{studentData?.nis}</strong>
-                      </div>
-                      <div className="bg-slate-50 p-3 rounded-xl border border-slate-200">
-                        <span className="text-slate-400 block text-[10px]">Kelas & Rombel</span>
-                        <strong className="text-slate-800 text-sm">{studentData?.className || 'Kelas Belum Ditentukan'}</strong>
-                      </div>
-                      <div className="bg-slate-50 p-3 rounded-xl border border-slate-200">
-                        <span className="text-slate-400 block text-[10px]">ID Pengguna Supabase Auth</span>
-                        <strong className="text-slate-600 text-[11px] font-mono truncate block">{studentData?.auth_user_id}</strong>
-                      </div>
-                      <div className="bg-slate-50 p-3 rounded-xl border border-slate-200">
-                        <span className="text-slate-400 block text-[10px]">Terdaftar Sejak</span>
-                        <strong className="text-slate-800 text-sm">
-                          {studentData?.created_at ? new Date(studentData.created_at).toLocaleDateString('id-ID') : '-'}
-                        </strong>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs pt-2">
+                        <div className="bg-slate-50 p-3 rounded-xl border border-slate-200">
+                          <span className="text-slate-400 block text-[10px]">Nomor Induk Siswa (NIS)</span>
+                          <strong className="text-slate-800 text-sm font-mono">{studentData?.nis}</strong>
+                        </div>
+                        <div className="bg-slate-50 p-3 rounded-xl border border-slate-200">
+                          <span className="text-slate-400 block text-[10px]">Kelas & Rombel</span>
+                          <strong className="text-slate-800 text-sm">{studentData?.className || 'Kelas Belum Ditentukan'}</strong>
+                        </div>
+                        <div className="bg-slate-50 p-3 rounded-xl border border-slate-200">
+                          <span className="text-slate-400 block text-[10px]">ID Pengguna Supabase Auth</span>
+                          <strong className="text-slate-600 text-[11px] font-mono truncate block">{studentData?.auth_user_id || '-'}</strong>
+                        </div>
+                        <div className="bg-slate-50 p-3 rounded-xl border border-slate-200">
+                          <span className="text-slate-400 block text-[10px]">Terdaftar Sejak</span>
+                          <strong className="text-slate-800 text-sm">
+                            {studentData?.created_at ? new Date(studentData.created_at).toLocaleDateString('id-ID') : '-'}
+                          </strong>
+                        </div>
                       </div>
                     </div>
                   </div>
-                </div>
+                )}
               </div>
             </div>
           )}

@@ -635,23 +635,13 @@ export const LandingPage: React.FC = () => {
                   </button>
                 </li>
                 <li>
-                  <button onClick={() => navigate('/portal/guru')} className="hover:text-emerald-400 transition-colors text-left">
-                    Portal Penilaian Guru
-                  </button>
-                </li>
-                <li>
-                  <button onClick={() => navigate('/portal/wali')} className="hover:text-emerald-400 transition-colors text-left">
-                    Portal Wali Murid
+                  <button onClick={() => navigate('/portal/admin')} className="hover:text-emerald-400 transition-colors text-left">
+                    Portal Administrator Sekolah
                   </button>
                 </li>
                 <li>
                   <button onClick={() => setShowExamModal(true)} className="hover:text-amber-400 transition-colors text-left flex items-center gap-1 text-amber-300">
                     <ExternalLink className="w-3 h-3" /> Sistem Ujian Sekolah
-                  </button>
-                </li>
-                <li>
-                  <button onClick={() => navigate('/portal/admin')} className="hover:text-emerald-400 transition-colors text-left">
-                    Portal Admin Sistem
                   </button>
                 </li>
               </ul>

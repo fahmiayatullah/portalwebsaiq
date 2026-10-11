@@ -4,7 +4,8 @@ import {
   Activity, School, Plus, ExternalLink, Loader2, AlertCircle,
   CheckCircle2, Trash2, Calendar, Newspaper, ArrowRight,
   Search, Filter, KeyRound, Mail,
-  ToggleLeft, ToggleRight, FileSpreadsheet, Lock
+  ToggleLeft, ToggleRight, FileSpreadsheet, Lock,
+  Eye, EyeOff, UserPlus
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { supabase } from '../lib/supabase';
@@ -83,6 +84,13 @@ export const AdminPortal: React.FC = () => {
 
   // Modals state
   const [showAddStudent, setShowAddStudent] = useState(false);
+  const [showCreateAccountModal, setShowCreateAccountModal] = useState(false);
+  const [accountMode, setAccountMode] = useState<'existing' | 'new'>('existing');
+  const [selectedStudentId, setSelectedStudentId] = useState<string>('');
+  const [accountEmail, setAccountEmail] = useState<string>('');
+  const [accountPassword, setAccountPassword] = useState<string>('');
+  const [showAccountPassword, setShowAccountPassword] = useState<boolean>(false);
+
   const [showAddTeacher, setShowAddTeacher] = useState(false);
   const [showAddClass, setShowAddClass] = useState(false);
   const [showAddSubject, setShowAddSubject] = useState(false);
@@ -242,6 +250,98 @@ export const AdminPortal: React.FC = () => {
         setShowAddStudent(false);
         setNewStudent({ name: '', nis: '', email: '', password: '', classId: classes[0]?.id || '' });
         loadAllData();
+      }
+    } catch {
+      showNotification('error', 'Terjadi kesalahan jaringan saat membuat akun siswa.');
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  // 1.A-2 PILIH SISWA UNTUK PEMBUATAN AKUN (Sistem 1 Siswa 1 Akun)
+  const handleSelectStudentForAccount = (studentId: string) => {
+    setSelectedStudentId(studentId);
+    const chosen = students.find(s => s.id === studentId);
+    if (chosen) {
+      const safeName = chosen.name.toLowerCase().replace(/[^a-z0-9]/g, '');
+      const suggestedEmail = chosen.email || `${safeName}.${chosen.nis}@siswa.saiq.sch.id`;
+      setAccountEmail(suggestedEmail);
+    } else {
+      setAccountEmail('');
+    }
+  };
+
+  const openCreateAccountForStudent = (s: Student) => {
+    setSelectedStudentId(s.id);
+    const safeName = s.name.toLowerCase().replace(/[^a-z0-9]/g, '');
+    setAccountEmail(s.email || `${safeName}.${s.nis}@siswa.saiq.sch.id`);
+    setAccountPassword('');
+    setAccountMode('existing');
+    setShowCreateAccountModal(true);
+  };
+
+  const handleCreateAccountSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+
+    if (!accountEmail || !accountPassword) {
+      showNotification('error', 'Email dan kata sandi awal wajib diisi.');
+      return;
+    }
+
+    if (accountPassword.length < 6) {
+      showNotification('error', 'Kata sandi minimal harus 6 karakter.');
+      return;
+    }
+
+    const payload: any = {
+      email: accountEmail.trim(),
+      password: accountPassword,
+    };
+
+    if (accountMode === 'existing') {
+      if (!selectedStudentId) {
+        showNotification('error', 'Silakan pilih siswa yang akan dibuatkan akun.');
+        return;
+      }
+      const chosen = students.find(s => s.id === selectedStudentId);
+      if (chosen?.auth_user_id) {
+        showNotification(
+          'error',
+          `Siswa "${chosen.name}" sudah memiliki akun aktif. Sistem menolak pembuatan akun kedua demi mencegah duplikasi akun.`
+        );
+        return;
+      }
+      payload.student_id = selectedStudentId;
+    } else {
+      if (!newStudent.name || !newStudent.nis) {
+        showNotification('error', 'Nama dan NIS siswa wajib diisi.');
+        return;
+      }
+      payload.name = newStudent.name.trim();
+      payload.nis = newStudent.nis.trim();
+      payload.class_id = newStudent.classId || null;
+    }
+
+    setActionLoading(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('create-student', {
+        body: payload,
+      });
+
+      if (error || data?.error) {
+        const errorMsg = data?.error || error?.message || 'Layanan pembuatan akun auth belum merespons.';
+        showNotification('error', `Gagal membuat akun siswa: ${errorMsg}`);
+      } else {
+        showNotification(
+          'success',
+          data?.message || 'Akun siswa berhasil dibuat dan ditautkan dengan aman ke Supabase Auth!'
+        );
+        setShowCreateAccountModal(false);
+        setSelectedStudentId('');
+        setAccountEmail('');
+        setAccountPassword('');
+        setNewStudent({ name: '', nis: '', email: '', password: '', classId: classes[0]?.id || '' });
+        await loadAllData();
       }
     } catch {
       showNotification('error', 'Terjadi kesalahan jaringan saat membuat akun siswa.');
@@ -1049,25 +1149,25 @@ export const AdminPortal: React.FC = () => {
               {/* Account Metrics */}
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                 <div className="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-sm">
-                  <div className="text-[11px] font-bold text-slate-400 uppercase">Total Akun Siswa</div>
+                  <div className="text-[11px] font-bold text-slate-400 uppercase">Total Siswa Terdaftar</div>
                   <div className="text-2xl font-black text-slate-900 mt-1">{students.length}</div>
-                </div>
-                <div className="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-sm">
-                  <div className="text-[11px] font-bold text-emerald-600 uppercase">Akun Aktif</div>
-                  <div className="text-2xl font-black text-emerald-700 mt-1">
-                    {students.filter(s => s.status === 'active').length}
-                  </div>
-                </div>
-                <div className="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-sm">
-                  <div className="text-[11px] font-bold text-rose-500 uppercase">Akun Dinonaktifkan</div>
-                  <div className="text-2xl font-black text-rose-600 mt-1">
-                    {students.filter(s => s.status === 'inactive').length}
-                  </div>
                 </div>
                 <div className="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-sm">
                   <div className="text-[11px] font-bold text-purple-600 uppercase">Terkoneksi Auth UID</div>
                   <div className="text-2xl font-black text-purple-700 mt-1">
                     {students.filter(s => !!s.auth_user_id).length}
+                  </div>
+                </div>
+                <div className="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-sm">
+                  <div className="text-[11px] font-bold text-emerald-600 uppercase">Akun Aktif</div>
+                  <div className="text-2xl font-black text-emerald-700 mt-1">
+                    {students.filter(s => s.status === 'active' && !!s.auth_user_id).length}
+                  </div>
+                </div>
+                <div className="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-sm">
+                  <div className="text-[11px] font-bold text-rose-500 uppercase">Akun Dinonaktifkan</div>
+                  <div className="text-2xl font-black text-rose-600 mt-1">
+                    {students.filter(s => s.status === 'inactive' && !!s.auth_user_id).length}
                   </div>
                 </div>
               </div>
@@ -1085,7 +1185,13 @@ export const AdminPortal: React.FC = () => {
                     </p>
                   </div>
                   <button
-                    onClick={() => setShowAddStudent(true)}
+                    onClick={() => {
+                      setSelectedStudentId('');
+                      setAccountEmail('');
+                      setAccountPassword('');
+                      setAccountMode('existing');
+                      setShowCreateAccountModal(true);
+                    }}
                     className="px-4 py-2.5 rounded-xl bg-purple-600 hover:bg-purple-700 text-white font-bold text-xs flex items-center gap-1.5 shadow-md transition-all"
                   >
                     <Plus className="w-4 h-4" />
@@ -1182,48 +1288,68 @@ export const AdminPortal: React.FC = () => {
                                   )}
                                 </td>
                                 <td className="py-3 px-3">
-                                  <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-extrabold uppercase ${
-                                    s.status === 'active'
-                                      ? 'bg-emerald-100 text-emerald-800 border border-emerald-200'
-                                      : 'bg-rose-100 text-rose-800 border border-rose-200'
-                                  }`}>
-                                    {s.status === 'active' ? 'Aktif (Diberi Akses)' : 'Nonaktif (Diblokir)'}
-                                  </span>
+                                  {!s.auth_user_id ? (
+                                    <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-extrabold uppercase bg-slate-100 text-slate-600 border border-slate-200">
+                                      <AlertCircle className="w-3 h-3 text-amber-500" />
+                                      <span>Belum Ada Akun</span>
+                                    </span>
+                                  ) : (
+                                    <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-extrabold uppercase ${
+                                      s.status === 'active'
+                                        ? 'bg-emerald-100 text-emerald-800 border border-emerald-200'
+                                        : 'bg-rose-100 text-rose-800 border border-rose-200'
+                                    }`}>
+                                      {s.status === 'active' ? 'Aktif (Diberi Akses)' : 'Nonaktif (Diblokir)'}
+                                    </span>
+                                  )}
                                 </td>
                                 <td className="py-3 px-3 text-center">
                                   <div className="flex items-center justify-center gap-2">
-                                    <button
-                                      onClick={() => handleToggleStudentStatus(s.id, s.status, s.name)}
-                                      disabled={actionLoading}
-                                      className={`px-3 py-1.5 rounded-xl font-bold text-[11px] transition-all flex items-center gap-1 ${
-                                        s.status === 'active'
-                                          ? 'bg-rose-50 text-rose-700 hover:bg-rose-100 border border-rose-200'
-                                          : 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200'
-                                      }`}
-                                      title={s.status === 'active' ? 'Nonaktifkan akun ini' : 'Aktifkan kembali akun ini'}
-                                    >
-                                      {s.status === 'active' ? (
-                                        <>
-                                          <ToggleLeft className="w-3.5 h-3.5" />
-                                          <span>Nonaktifkan</span>
-                                        </>
-                                      ) : (
-                                        <>
-                                          <ToggleRight className="w-3.5 h-3.5" />
-                                          <span>Aktifkan</span>
-                                        </>
-                                      )}
-                                    </button>
+                                    {!s.auth_user_id ? (
+                                      <button
+                                        onClick={() => openCreateAccountForStudent(s)}
+                                        className="px-3 py-1.5 rounded-xl bg-purple-600 hover:bg-purple-700 text-white font-bold text-[11px] transition-all flex items-center gap-1 shadow-sm"
+                                        title="Buat Akun Auth untuk siswa ini"
+                                      >
+                                        <UserPlus className="w-3.5 h-3.5" />
+                                        <span>Buat Akun</span>
+                                      </button>
+                                    ) : (
+                                      <>
+                                        <button
+                                          onClick={() => handleToggleStudentStatus(s.id, s.status, s.name)}
+                                          disabled={actionLoading}
+                                          className={`px-3 py-1.5 rounded-xl font-bold text-[11px] transition-all flex items-center gap-1 ${
+                                            s.status === 'active'
+                                              ? 'bg-rose-50 text-rose-700 hover:bg-rose-100 border border-rose-200'
+                                              : 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200'
+                                          }`}
+                                          title={s.status === 'active' ? 'Nonaktifkan akun ini' : 'Aktifkan kembali akun ini'}
+                                        >
+                                          {s.status === 'active' ? (
+                                            <>
+                                              <ToggleLeft className="w-3.5 h-3.5" />
+                                              <span>Nonaktifkan</span>
+                                            </>
+                                          ) : (
+                                            <>
+                                              <ToggleRight className="w-3.5 h-3.5" />
+                                              <span>Aktifkan</span>
+                                            </>
+                                          )}
+                                        </button>
 
-                                    <button
-                                      onClick={() => handleResetStudentPassword(studentEmail, s.name)}
-                                      disabled={actionLoading}
-                                      className="px-2.5 py-1.5 rounded-xl bg-slate-100 text-slate-700 hover:bg-slate-200 font-bold text-[11px] transition-all flex items-center gap-1 border border-slate-200"
-                                      title="Kirim email instruksi reset kata sandi"
-                                    >
-                                      <KeyRound className="w-3 h-3 text-slate-500" />
-                                      <span>Reset Sandi</span>
-                                    </button>
+                                        <button
+                                          onClick={() => handleResetStudentPassword(studentEmail, s.name)}
+                                          disabled={actionLoading}
+                                          className="px-2.5 py-1.5 rounded-xl bg-slate-100 text-slate-700 hover:bg-slate-200 font-bold text-[11px] transition-all flex items-center gap-1 border border-slate-200"
+                                          title="Kirim email instruksi reset kata sandi"
+                                        >
+                                          <KeyRound className="w-3 h-3 text-slate-500" />
+                                          <span>Reset Sandi</span>
+                                        </button>
+                                      </>
+                                    )}
                                   </div>
                                 </td>
                               </tr>
@@ -1744,6 +1870,233 @@ export const AdminPortal: React.FC = () => {
           )}
         </main>
       </div>
+
+      {/* Modal Pembuatan Akun Siswa Resmi (1 Siswa = 1 Akun Auth) */}
+      {showCreateAccountModal && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl max-w-lg w-full p-6 shadow-2xl border border-slate-100 animate-in fade-in zoom-in-95 max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100 mb-4">
+              <div className="flex items-center gap-2.5">
+                <div className="w-10 h-10 rounded-2xl bg-purple-100 text-purple-700 flex items-center justify-center">
+                  <KeyRound className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-base font-extrabold text-slate-900">Buat Akun Autentikasi Siswa</h3>
+                  <p className="text-[11px] text-purple-700 font-semibold">
+                    Prinsip: 1 Siswa = 1 Akun Supabase Auth (auth.users)
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowCreateAccountModal(false)}
+                className="w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-500 font-bold flex items-center justify-center text-sm"
+              >
+                &times;
+              </button>
+            </div>
+
+            {/* Mode Selector */}
+            <div className="flex bg-slate-100 p-1 rounded-2xl mb-4 text-xs font-bold">
+              <button
+                type="button"
+                onClick={() => setAccountMode('existing')}
+                className={`flex-1 py-2 rounded-xl transition-all ${
+                  accountMode === 'existing'
+                    ? 'bg-white text-purple-900 shadow-sm'
+                    : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                Pilih Siswa Terdaftar (Rekomendasi)
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setAccountMode('new');
+                  setSelectedStudentId('');
+                  setAccountEmail('');
+                }}
+                className={`flex-1 py-2 rounded-xl transition-all ${
+                  accountMode === 'new'
+                    ? 'bg-white text-purple-900 shadow-sm'
+                    : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                Daftar Siswa Baru Sekaligus
+              </button>
+            </div>
+
+            <form onSubmit={handleCreateAccountSubmit} className="space-y-3.5 text-xs">
+              {accountMode === 'existing' ? (
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">
+                    Pilih Siswa yang Belum Memiliki Akun <span className="text-rose-500">*</span>
+                  </label>
+                  <select
+                    required
+                    value={selectedStudentId}
+                    onChange={e => handleSelectStudentForAccount(e.target.value)}
+                    className="w-full px-3 py-2.5 rounded-xl border border-slate-200 bg-white font-medium text-slate-800 focus:outline-none focus:ring-2 focus:ring-purple-500/20"
+                  >
+                    <option value="">-- Pilih Siswa --</option>
+                    <optgroup label="Siswa Belum Memiliki Akun">
+                      {students.filter(s => !s.auth_user_id).map(s => (
+                        <option key={s.id} value={s.id}>
+                          {s.name} (NIS: {s.nis}) - {s.className}
+                        </option>
+                      ))}
+                    </optgroup>
+                    <optgroup label="Siswa Sudah Memiliki Akun (Dilarang Akun Kedua)">
+                      {students.filter(s => !!s.auth_user_id).map(s => (
+                        <option key={s.id} value={s.id} disabled>
+                          {s.name} (NIS: {s.nis}) - [SUDAH TERKONEKSI UID]
+                        </option>
+                      ))}
+                    </optgroup>
+                  </select>
+
+                  {/* Warning jika terpilih siswa yang sudah punya akun */}
+                  {selectedStudentId && students.find(s => s.id === selectedStudentId)?.auth_user_id && (
+                    <div className="mt-2 p-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-800 text-[11px] flex items-center gap-2">
+                      <AlertCircle className="w-4 h-4 shrink-0 text-rose-600" />
+                      <span>Siswa ini sudah memiliki akun aktif. Sistem menolak pembuatan akun kedua.</span>
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  <div>
+                    <label className="block font-bold text-slate-700 mb-1">
+                      Nama Lengkap Siswa Baru <span className="text-rose-500">*</span>
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      value={newStudent.name}
+                      onChange={e => {
+                        const val = e.target.value;
+                        setNewStudent(prev => ({ ...prev, name: val }));
+                        if (val && newStudent.nis) {
+                          const safe = val.toLowerCase().replace(/[^a-z0-9]/g, '');
+                          setAccountEmail(`${safe}.${newStudent.nis}@siswa.saiq.sch.id`);
+                        }
+                      }}
+                      className="w-full px-3 py-2.5 rounded-xl border border-slate-200 text-xs text-slate-800"
+                      placeholder="Contoh: Ahmad Fauzan"
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block font-bold text-slate-700 mb-1">
+                        Nomor Induk Siswa (NIS) <span className="text-rose-500">*</span>
+                      </label>
+                      <input
+                        type="text"
+                        required
+                        value={newStudent.nis}
+                        onChange={e => {
+                          const val = e.target.value;
+                          setNewStudent(prev => ({ ...prev, nis: val }));
+                          if (newStudent.name && val) {
+                            const safe = newStudent.name.toLowerCase().replace(/[^a-z0-9]/g, '');
+                            setAccountEmail(`${safe}.${val}@siswa.saiq.sch.id`);
+                          }
+                        }}
+                        className="w-full px-3 py-2.5 rounded-xl border border-slate-200 text-xs font-mono text-slate-800"
+                        placeholder="Contoh: 2024010"
+                      />
+                    </div>
+                    <div>
+                      <label className="block font-bold text-slate-700 mb-1">Rombel Kelas</label>
+                      <select
+                        value={newStudent.classId}
+                        onChange={e => setNewStudent(prev => ({ ...prev, classId: e.target.value }))}
+                        className="w-full px-3 py-2.5 rounded-xl border border-slate-200 text-xs text-slate-800"
+                      >
+                        {classes.map(c => (
+                          <option key={c.id} value={c.id}>{c.name}</option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              <div>
+                <label className="block font-bold text-slate-700 mb-1">
+                  Alamat Email Login Siswa <span className="text-rose-500">*</span>
+                </label>
+                <div className="relative">
+                  <Mail className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                  <input
+                    type="email"
+                    required
+                    value={accountEmail}
+                    onChange={e => setAccountEmail(e.target.value)}
+                    className="w-full pl-9 pr-3 py-2.5 rounded-xl border border-slate-200 text-xs font-mono text-slate-800"
+                    placeholder="nama.nis@siswa.saiq.sch.id"
+                  />
+                </div>
+                <p className="text-[10px] text-slate-400 mt-1">
+                  Format email resmi sekolah untuk autentikasi Supabase.
+                </p>
+              </div>
+
+              <div>
+                <label className="block font-bold text-slate-700 mb-1">
+                  Kata Sandi Awal <span className="text-rose-500">*</span>
+                </label>
+                <div className="relative">
+                  <input
+                    type={showAccountPassword ? 'text' : 'password'}
+                    required
+                    minLength={6}
+                    value={accountPassword}
+                    onChange={e => setAccountPassword(e.target.value)}
+                    className="w-full pl-3 pr-10 py-2.5 rounded-xl border border-slate-200 text-xs font-mono text-slate-800"
+                    placeholder="Minimal 6 karakter"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowAccountPassword(!showAccountPassword)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                  >
+                    {showAccountPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </button>
+                </div>
+                <p className="text-[10px] text-slate-400 mt-1">
+                  Password dienkripsi langsung oleh Supabase Auth dan tidak disimpan dalam bentuk plaintext.
+                </p>
+              </div>
+
+              {/* Information Callout */}
+              <div className="p-3 rounded-2xl bg-purple-50 border border-purple-100 text-purple-900 text-[11px] leading-relaxed">
+                <strong>Prinsip Satu Siswa Satu Akun:</strong> Akun ini akan mendapatkan UUID eksklusif di <code className="font-mono bg-purple-100 px-1 rounded">auth.users</code> dan ditautkan ke kolom <code className="font-mono bg-purple-100 px-1 rounded">students.auth_user_id</code>. Siswa hanya dapat melihat portal pribadinya sendiri.
+              </div>
+
+              <div className="pt-3 flex gap-2 justify-end">
+                <button
+                  type="button"
+                  onClick={() => setShowCreateAccountModal(false)}
+                  disabled={actionLoading}
+                  className="px-4 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs transition-colors"
+                >
+                  Batal
+                </button>
+                <button
+                  type="submit"
+                  disabled={actionLoading || (accountMode === 'existing' && (!selectedStudentId || !!students.find(s => s.id === selectedStudentId)?.auth_user_id))}
+                  className="px-5 py-2.5 rounded-xl bg-purple-600 hover:bg-purple-700 disabled:opacity-50 text-white font-bold text-xs flex items-center gap-1.5 shadow-md transition-all"
+                >
+                  {actionLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <KeyRound className="w-4 h-4" />}
+                  <span>Buat & Tautkan Akun</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
 
       {/* Modal Tambah Siswa */}
       {showAddStudent && (

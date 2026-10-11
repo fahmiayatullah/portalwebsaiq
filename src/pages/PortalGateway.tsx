@@ -1,6 +1,6 @@
 import React from 'react';
 import {
-  GraduationCap, UserCheck, Users, ShieldCheck, ArrowRight,
+  GraduationCap, ShieldCheck, ArrowRight,
   ExternalLink, ArrowLeft, Sparkles, School, CheckCircle2
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
@@ -13,7 +13,7 @@ export const PortalGateway: React.FC = () => {
       path: '/portal/siswa',
       title: 'Portal Siswa',
       subtitle: 'Ruang Informasi Akademik Pribadi Siswa',
-      icon: <GraduationCap className="w-8 h-8 text-emerald-600" />,
+      icon: <GraduationCap className="w-9 h-9 text-emerald-600" />,
       color: 'from-emerald-500 to-teal-600',
       badge: 'Siswa / Murid',
       bgLight: 'bg-emerald-50',
@@ -21,44 +21,14 @@ export const PortalGateway: React.FC = () => {
         'Melihat nilai tugas & latihan yang diterbitkan guru',
         'Membaca catatan & bimbingan personal dari guru',
         'Grafik perkembangan belajar per mata pelajaran',
-        'Pengumuman akademik resmi madrasah',
-      ],
-    },
-    {
-      path: '/portal/guru',
-      title: 'Portal Guru',
-      subtitle: 'Pusat Penginputan Nilai & Catatan Akademik',
-      icon: <UserCheck className="w-8 h-8 text-blue-600" />,
-      color: 'from-blue-600 to-cyan-600',
-      badge: 'Bapak / Ibu Guru',
-      bgLight: 'bg-blue-50',
-      features: [
-        'Input nilai individu & simpan Draft atau Publikasi',
-        'Kirim catatan & motivasi bimbingan belajar siswa',
-        'Lihat daftar siswa terdaftar pada setiap rombel',
-        'Terbitkan pengumuman akademik sekolah',
-      ],
-    },
-    {
-      path: '/portal/wali',
-      title: 'Portal Wali Murid',
-      subtitle: 'Pemantauan Transparan Kemajuan Belajar Ananda',
-      icon: <Users className="w-8 h-8 text-amber-600" />,
-      color: 'from-amber-500 to-orange-500',
-      badge: 'Orang Tua / Wali',
-      bgLight: 'bg-amber-50',
-      features: [
-        'Melihat transkrip nilai ananda secara transparan',
-        'Membaca evaluasi dan keterangan pembinaan guru',
-        'Pantau grafik perkembangan nilai ananda',
-        'Akses pengumuman penting sekolah',
+        'Unduh rekapitulasi nilai resmi sekolah (PDF)',
       ],
     },
     {
       path: '/portal/admin',
       title: 'Portal Administrator',
       subtitle: 'Pengelolaan Akun Pengguna & Data Sekolah',
-      icon: <ShieldCheck className="w-8 h-8 text-purple-600" />,
+      icon: <ShieldCheck className="w-9 h-9 text-purple-600" />,
       color: 'from-purple-600 to-indigo-600',
       badge: 'Staf Administrasi',
       bgLight: 'bg-purple-50',
@@ -115,34 +85,34 @@ export const PortalGateway: React.FC = () => {
           </p>
         </div>
 
-        {/* 4 Cards Grid */}
-        <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6 max-w-7xl mx-auto w-full">
+        {/* 2 Cards Grid: Portal Siswa & Portal Administrator */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-8 max-w-4xl mx-auto w-full">
           {portals.map((p, idx) => (
             <div
               key={idx}
-              className="bg-white rounded-3xl p-6 shadow-sm hover:shadow-xl transition-all duration-300 hover:-translate-y-2 border border-slate-200/80 flex flex-col justify-between group"
+              className="bg-white rounded-3xl p-7 md:p-8 shadow-sm hover:shadow-xl transition-all duration-300 hover:-translate-y-2 border border-slate-200/80 flex flex-col justify-between group"
             >
               <div>
-                <div className="flex justify-between items-center mb-5">
-                  <div className={`w-14 h-14 rounded-2xl ${p.bgLight} flex items-center justify-center group-hover:scale-110 transition-transform`}>
+                <div className="flex justify-between items-center mb-6">
+                  <div className={`w-16 h-16 rounded-2xl ${p.bgLight} flex items-center justify-center group-hover:scale-110 transition-transform`}>
                     {p.icon}
                   </div>
-                  <span className="text-[11px] font-bold px-2.5 py-1 rounded-full bg-slate-100 text-slate-600">
+                  <span className="text-xs font-bold px-3 py-1 rounded-full bg-slate-100 text-slate-700">
                     {p.badge}
                   </span>
                 </div>
 
-                <h2 className="text-xl font-bold text-slate-900 mb-1 group-hover:text-emerald-700 transition-colors">
+                <h2 className="text-2xl font-black text-slate-900 mb-2 group-hover:text-emerald-700 transition-colors">
                   {p.title}
                 </h2>
-                <p className="text-xs text-slate-500 mb-5 leading-relaxed">
+                <p className="text-xs sm:text-sm text-slate-500 mb-6 leading-relaxed">
                   {p.subtitle}
                 </p>
 
-                <div className="space-y-2 mb-6 border-t border-slate-100 pt-4">
+                <div className="space-y-3 mb-8 border-t border-slate-100 pt-5">
                   {p.features.map((feat, fIdx) => (
-                    <div key={fIdx} className="flex items-start gap-2 text-xs text-slate-600">
-                      <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500 shrink-0 mt-0.5" />
+                    <div key={fIdx} className="flex items-start gap-2.5 text-xs sm:text-sm text-slate-600">
+                      <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0 mt-0.5" />
                       <span>{feat}</span>
                     </div>
                   ))}
@@ -152,7 +122,7 @@ export const PortalGateway: React.FC = () => {
               <div>
                 <button
                   onClick={() => navigate(p.path)}
-                  className={`w-full py-3 rounded-xl font-bold text-white bg-gradient-to-r ${p.color} shadow-md hover:shadow-lg transition-all flex items-center justify-center gap-2 text-sm`}
+                  className={`w-full py-3.5 rounded-xl font-bold text-white bg-gradient-to-r ${p.color} shadow-md hover:shadow-lg transition-all flex items-center justify-center gap-2 text-sm sm:text-base`}
                 >
                   <span>Masuk Ruang {p.badge}</span>
                   <ArrowRight className="w-4 h-4" />
@@ -191,7 +161,7 @@ export const PortalGateway: React.FC = () => {
 
       {/* Footer */}
       <footer className="text-center py-6 text-xs text-slate-500 border-t border-slate-200 bg-white">
-        SDI SAIQ AL-HIKMAH • Portal Informasi Akademik Siswa & Guru
+        SDI SAIQ AL-HIKMAH • Portal Informasi Akademik Siswa & Administrator
       </footer>
     </div>
   );
