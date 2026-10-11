@@ -240,8 +240,9 @@ export const AdminPortal: React.FC = () => {
       }
 
       // 2. Buat Akun via Supabase Edge Function (Auth Admin API)
-      const { data, error } = await supabase.functions.invoke('create-student', {
+      const { data, error } = await supabase.functions.invoke('create-account', {
         body: {
+          account_type: 'student',
           email: newStudent.email.trim(),
           password: newStudent.password,
           nis: newStudent.nis.trim(),
@@ -254,7 +255,7 @@ export const AdminPortal: React.FC = () => {
         const errorMsg = data?.error || error?.message || 'Layanan pembuatan akun auth belum merespons.';
         showNotification(
           'error',
-          `Gagal membuat akun auth siswa: ${errorMsg}. Pastikan Supabase Edge Function 'create-student' telah aktif di server.`
+          `Gagal membuat akun auth siswa: ${errorMsg}. Pastikan Edge Function 'create-account' telah aktif di server Supabase.`
         );
       } else {
         showNotification(
@@ -308,6 +309,7 @@ export const AdminPortal: React.FC = () => {
     }
 
     const payload: any = {
+      account_type: 'student',
       email: accountEmail.trim(),
       password: accountPassword,
     };
@@ -338,7 +340,7 @@ export const AdminPortal: React.FC = () => {
 
     setActionLoading(true);
     try {
-      const { data, error } = await supabase.functions.invoke('create-student', {
+      const { data, error } = await supabase.functions.invoke('create-account', {
         body: payload,
       });
 
@@ -513,6 +515,7 @@ export const AdminPortal: React.FC = () => {
     }
 
     const payload: any = {
+      account_type: 'teacher',
       email: teacherAccountEmail.trim(),
       password: teacherAccountPassword,
     };
@@ -544,7 +547,7 @@ export const AdminPortal: React.FC = () => {
 
     setActionLoading(true);
     try {
-      const { data, error } = await supabase.functions.invoke('create-teacher', {
+      const { data, error } = await supabase.functions.invoke('create-account', {
         body: payload,
       });
 

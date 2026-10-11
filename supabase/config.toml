@@ -1,0 +1,15 @@
+# Supabase Project Configuration for SDI SAIQ Al-Hikmah
+project_id = "trkuyknyjbmeeatkpzaf"
+
+[api]
+enabled = true
+port = 54321
+schemas = ["public", "storage", "graphql_public"]
+extra_search_path = ["public", "extensions"]
+max_rows = 1000
+
+[functions.create-account]
+verify_jwt = false
+
+[functions.dynamic-task]
+verify_jwt = false
